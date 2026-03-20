@@ -1,0 +1,17 @@
+services:
+  hardhat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hardhat_blockchain
+    restart: unless-stopped
+    ports:
+      - "6969:6969"
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+

@@ -1,0 +1,56 @@
+{
+  "name": "sw2-blockchain",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/Deploy.ts",
+    "console": "hardhat console --network localhost",
+    "zksync-sepolia-console": "hardhat console --network zkSyncSepolia",
+    "local-node": "hardhat node",
+    "clean-artifacts": "hardhat clean",
+    "server": "node ./server/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@matterlabs/hardhat-zksync-deploy": "^1.6.0",
+    "@matterlabs/hardhat-zksync-solc": "^1.2.5",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.9",
+    "@types/node": "^22.7.9",
+    "chai": "^4.5.0",
+    "ethers": "^6.13.4",
+    "hardhat": "^2.22.15",
+    "hardhat-gas-reporter": "^1.0.10",
+    "solidity-coverage": "^0.8.13",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.2",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@types/uuid": "^10.0.0",
+    "body-parser": "^1.20.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "uuid": "^10.0.0",
+    "zksync-ethers": "^6.14.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "keccak",
+      "secp256k1"
+    ],
+    "ignoredBuiltDependencies": [
+      "cpu-features",
+      "protobufjs",
+      "ssh2"
+    ]
+  }
+}

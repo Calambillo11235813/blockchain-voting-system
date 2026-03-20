@@ -1,0 +1,12 @@
+node_modules
+dist
+postres/
+
+*.log
+.env
+.DS_Store
+
+./backups
+./logs
+./temp
+
