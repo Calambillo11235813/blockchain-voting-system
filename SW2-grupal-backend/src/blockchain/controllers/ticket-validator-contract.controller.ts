@@ -10,12 +10,11 @@ import {
     ParseUUIDPipe
 } from '@nestjs/common';
 import { Request } from 'express';
-import { AuthTenantGuard } from 'src/auth/guards/auth-tenant.guard';
 import { AuthSaasGuard } from 'src/auth/guards/auth-saas.guard';
 import { TicketValidatorContractService } from '../services/ticket-validator-contract.service';
 
 @Controller('blockchain')
-@UseGuards(AuthTenantGuard, AuthSaasGuard)
+@UseGuards(AuthSaasGuard)
 export class TicketValidatorContractController {
     constructor(
         private readonly ticketValidatorContractService: TicketValidatorContractService,
@@ -44,7 +43,6 @@ export class TicketValidatorContractController {
         },
     ) {
         const result = await this.ticketValidatorContractService.registerTicketValidation(
-            req.memberTenantId,
             validationData.ticketId,
             validationData.purchaseId,
             req.userId,
@@ -63,7 +61,7 @@ export class TicketValidatorContractController {
         @Req() req: Request,
         @Param('ticketId', ParseUUIDPipe) ticketId: string,
     ) {
-        const result = await this.ticketValidatorContractService.verifyTicket(req.memberTenantId, ticketId);
+        const result = await this.ticketValidatorContractService.verifyTicket(ticketId);
         return result;
     }
 
@@ -72,13 +70,13 @@ export class TicketValidatorContractController {
         @Req() req: Request,
         @Param('validationHash') validationHash: string,
     ) {
-        const result = await this.ticketValidatorContractService.verifyValidationHash(req.memberTenantId, validationHash);
+        const result = await this.ticketValidatorContractService.verifyValidationHash(validationHash);
         return result;
     }
 
     @Get('tenant-stats')
     async getTenantStats(@Req() req: Request) {
-        const result = await this.ticketValidatorContractService.getTenantStats(req.memberTenantId);
+        const result = await this.ticketValidatorContractService.getTenantStats();
         return result;
     }
 
@@ -87,7 +85,7 @@ export class TicketValidatorContractController {
         @Req() req: Request,
         @Query('eventId') eventId: string,
     ) {
-        const result = await this.ticketValidatorContractService.getEventStats(req.memberTenantId, eventId);
+        const result = await this.ticketValidatorContractService.getEventStats(eventId);
         return result;
     }
 
@@ -96,7 +94,7 @@ export class TicketValidatorContractController {
         @Req() req: Request,
         @Query('validatorId') validatorId: string,
     ) {
-        const result = await this.ticketValidatorContractService.getValidatorStats(req.memberTenantId, validatorId);
+        const result = await this.ticketValidatorContractService.getValidatorStats(validatorId);
         return result;
     }
 }

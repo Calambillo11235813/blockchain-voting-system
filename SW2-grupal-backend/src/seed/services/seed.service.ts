@@ -1,10 +1,7 @@
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { handleError } from 'src/common/helpers/function-helper';
-import { Configuration } from 'src/tenant/entities/configuration.entity';
-import { Subscription } from 'src/tenant/entities/subscription.entity';
 import { Repository } from 'typeorm';
-import { configurationSeedData, subscriptionSeedData } from '../data/subscription-configuration.data';
 import { Role } from 'src/auth/entities/role.entity';
 import { Permission } from 'src/auth/entities/permission.entity';
 import { permissionSeedData, roleSeedData } from '../data/role-permission.data';
@@ -14,12 +11,6 @@ import { ApiResponse } from 'src/common/interfaces/response.interface';
 export class SeedService {
 
   constructor(
-    @InjectRepository(Subscription)
-    private subscriptionRepository: Repository<Subscription>,
-
-    @InjectRepository(Configuration)
-    private configurationRepository: Repository<Configuration>,
-
     @InjectRepository(Role)
     private roleRepository: Repository<Role>,
 
@@ -31,8 +22,6 @@ export class SeedService {
 
   async seed(): Promise<ApiResponse<null>> {
     try {
-      await this.seedSubscriptions();
-      await this.seedConfigurations();
       await this.seedRoles();
       await this.seedPermissions();
       return {
@@ -47,65 +36,6 @@ export class SeedService {
         entityName: 'Seed',
         additionalInfo: {
           message: 'Error al sembrar los datos',
-        }
-      });
-    }
-  }
-
-
-  private async seedSubscriptions(): Promise<ApiResponse<Subscription[]>> {
-    try {
-      const count = await this.subscriptionRepository.count();
-
-      if (count > 0) {
-        throw new BadRequestException('Ya existen planes de suscripción. Omitiendo siembra.');
-      }
-      const subscriptionsToSave = subscriptionSeedData.map(data =>
-        this.subscriptionRepository.create(data)
-      );
-
-      await this.subscriptionRepository.save(subscriptionsToSave);
-
-      return {
-        statusCode: HttpStatus.OK,
-        message: `Se han creado correctamente los planes de suscripción.`,
-        data: subscriptionsToSave,
-      }
-    } catch (err) {
-      throw handleError(err, {
-        context: 'SeedService.seedSubscriptions',
-        action: 'seed',
-        entityName: 'Subscription',
-        additionalInfo: {
-          message: 'Error al sembrar los planes de suscripción',
-        }
-      });
-    }
-  }
-
-
-  private async seedConfigurations(): Promise<ApiResponse<Configuration[]>> {
-    try {
-      const count = await this.configurationRepository.count();
-      if (count > 0) {
-        throw new BadRequestException('Ya existen las configuraciones. Omitiendo siembra.');
-      }
-      const configurationsToSave = configurationSeedData.map(data =>
-        this.configurationRepository.create(data)
-      );
-      await this.configurationRepository.save(configurationsToSave);
-      return {
-        statusCode: HttpStatus.OK,
-        message: `Se han creado correctamente las configuraciones.`,
-        data: configurationsToSave
-      }
-    } catch (err) {
-      throw handleError(err, {
-        context: 'SeedService.seedConfigurations',
-        action: 'seed',
-        entityName: 'Configuration',
-        additionalInfo: {
-          message: 'Error al sembrar las configuraciones',
         }
       });
     }

@@ -1,4 +1,4 @@
-import { PaginationDto } from '../dto/pagination.dto';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
 
 export const calculatePagination = (paginationDto: PaginationDto) => {
     const {

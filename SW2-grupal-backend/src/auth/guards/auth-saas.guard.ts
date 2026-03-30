@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
-import { UserService } from 'src/user/services/user.service';
-import { useTokenSaas } from 'src/utils/user.token';
+import { UserService } from 'src/estudiantes/usuarios/services/user.service';
+import { useTokenSaas } from 'src/auth/tokens/user.token';
 
 @Injectable()
 export class AuthSaasGuard implements CanActivate {

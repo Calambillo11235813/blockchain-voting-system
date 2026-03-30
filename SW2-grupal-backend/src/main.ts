@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { CORS } from './constant/cors';
+import { CORS } from './common/constant/cors';
 import { json } from 'express';
 // import * as fs from 'fs';
 // import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
@@ -39,11 +39,6 @@ async function bootstrap() {
 
   app.use(
     json({
-      verify: (req: any, res, buf) => {
-        if (req.originalUrl.includes('/webhooks/stripe')) {
-          req.rawBody = buf;
-        }
-      },
       limit: '10mb',
     })
   );

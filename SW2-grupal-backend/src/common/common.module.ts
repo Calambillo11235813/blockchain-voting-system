@@ -1,19 +1,12 @@
 import { Module } from '@nestjs/common';
 import {
-    ConfigurationExistsPipe,
     EventExistsPipe,
     FacultyExistsPipe,
     IdentityVerificationExistsPipe,
-    MemberTenantExistsPipe,
-    PaymentExistsPipe,
     PermissionExistsPipe,
-    PurchaseExistsPipe,
     RoleExistsPipe,
     SectionExistsPipe,
-    SubscriptionExistsPipe,
-    TenantExistsPipe,
     TicketExistsPipe,
-    TicketPurchaseExistsPipe,
     UserExistsPipe
 } from './pipes/entity-exists.pipe';
 
@@ -26,14 +19,7 @@ import {
         FacultyExistsPipe,
         SectionExistsPipe,
         TicketExistsPipe,
-        IdentityVerificationExistsPipe,
-        PaymentExistsPipe,
-        PurchaseExistsPipe,
-        TicketPurchaseExistsPipe,
-        TenantExistsPipe,
-        ConfigurationExistsPipe,
-        MemberTenantExistsPipe,
-        SubscriptionExistsPipe
+        IdentityVerificationExistsPipe
     ],
     exports: [
         UserExistsPipe,
@@ -43,14 +29,7 @@ import {
         FacultyExistsPipe,
         SectionExistsPipe,
         TicketExistsPipe,
-        IdentityVerificationExistsPipe,
-        PaymentExistsPipe,
-        PurchaseExistsPipe,
-        TicketPurchaseExistsPipe,
-        TenantExistsPipe,
-        ConfigurationExistsPipe,
-        MemberTenantExistsPipe,
-        SubscriptionExistsPipe
+        IdentityVerificationExistsPipe
     ]
 })
 export class CommonModule { }

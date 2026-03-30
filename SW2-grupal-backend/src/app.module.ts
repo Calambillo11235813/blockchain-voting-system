@@ -4,20 +4,13 @@ import { envConfig } from './config/env/env.config';
 import { envSchema } from './config/env/env.schema';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
-import { EventModule } from './event/event.module';
-import { IdentityModule } from './identity/identity.module';
-import { TenantModule } from './tenant/tenant.module';
+import { EleccionesModule } from './elecciones/elecciones.module';
+import { IdentityModule } from './estudiantes/identidad/identity.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
-import { PaymentModule } from './payment/payment.module';
 import { SeedModule } from './seed/seed.module';
-import { UserModule } from './user/user.module';
-import { AuditModule } from './audit/audit.module';
-import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { UserModule } from './estudiantes/usuarios/user.module';
 import { CommonModule } from './common/common.module';
-import { AwsModule } from './aws/aws.module';
 import { readFileSync } from 'fs';
-// import { join } from 'path';
-import { ChatbotModule } from './chatbot/chatbot.module';
 import { join } from 'path';
 
 
@@ -58,18 +51,12 @@ import { join } from 'path';
       inject: [ConfigService]
     }),
     AuthModule,
-    EventModule,
+    EleccionesModule,
     IdentityModule,
-    TenantModule,
     BlockchainModule,
-    PaymentModule,
     SeedModule,
     UserModule,
-    AuditModule,
-    CloudinaryModule,
     CommonModule,
-    AwsModule,
-    ChatbotModule
   ],
   // providers: [
   //   LogsService,
@@ -80,6 +67,7 @@ import { join } from 'path';
   // ],
 })
 export class AppModule { }
+
 
 
 

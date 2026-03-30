@@ -2,7 +2,6 @@
 
 ## Descripción
 Backend desarrollado con **NestJS** para la plataforma **EventLy**, orientada a la **gestión de eventos** con:
-- **Multi-tenant** (áreas de trabajo/organizaciones) con membresías y roles.
 - **Pagos** (Stripe) para compra de tickets.
 - **Blockchain** para validación/registro de tickets (integración con contratos + Ethers).
 - **Identidad/IA** (AWS Textract/Rekognition) para extracción de texto y comparación facial.

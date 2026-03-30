@@ -1,7 +1,6 @@
-import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { Purchase } from "src/payment/entities/purchase.entity";
-import { IdentityVerification } from "src/identity/entities/identity-verification.entity";
-import { MemberTenant } from 'src/tenant/entities/member-tenant.entity';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { IdentityVerification } from "src/estudiantes/identidad/entities/identity-verification.entity";
+import { Role } from "./role.entity";
 
 @Entity()
 export class User {
@@ -87,14 +86,14 @@ export class User {
     is_policy_accepted: boolean;
 
     //?RELATIONS
-    @OneToMany(() => Purchase, purchase => purchase.user)
-    purchases: Purchase[];
-
     @OneToMany(() => IdentityVerification, iv => iv.user)
     identityVerifications: IdentityVerification[];
 
-    @OneToMany(() => MemberTenant, memberTenant => memberTenant.user)
-    tenantMemberships: MemberTenant[];
+    @ManyToOne(() => Role, {
+        nullable: true
+    })
+    @JoinColumn({ name: 'roleId' })
+    role: Role;
     //?
 
 }

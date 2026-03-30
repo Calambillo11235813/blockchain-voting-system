@@ -9,8 +9,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategy/jwt.strategy';
 import { AuthSaasGuard } from './guards/auth-saas.guard';
-import { MemberTenant } from 'src/tenant/entities/member-tenant.entity';
-import { UserModule } from 'src/user/user.module';
+import { UserModule } from 'src/estudiantes/usuarios/user.module';
 
 @Module({
   controllers: [AuthController],
@@ -21,7 +20,7 @@ import { UserModule } from 'src/user/user.module';
       User,
       Role,
       Permission,
-      MemberTenant
+      
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -41,7 +40,7 @@ import { UserModule } from 'src/user/user.module';
       User,
       Role,
       Permission,
-      MemberTenant
+      
     ]),
     AuthSaasGuard,
     UserModule,

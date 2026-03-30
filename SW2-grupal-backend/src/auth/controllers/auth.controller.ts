@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
-import { AuthService } from '../services/auth.service';
-import { LoginDTO } from '../dto/login.dto';
+import { AuthService } from 'src/auth/services/auth.service';
+import { LoginDTO } from 'src/auth/dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -12,14 +12,6 @@ export class AuthController {
     @Body() loginDTO: LoginDTO,
   ) {
     return this.authService.loginSaaS(loginDTO);
-  }
-
-  @Post('login-tenant')
-  @HttpCode(HttpStatus.OK)
-  async loginTenant(
-    @Body() loginDTO: LoginDTO,
-  ) {
-    return this.authService.loginService(loginDTO);
   }
 
   // Estos métodos están comentados en el servicio, así que los comentaré aquí también

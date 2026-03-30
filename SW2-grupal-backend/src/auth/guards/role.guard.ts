@@ -2,9 +2,8 @@ import { CanActivate, ExecutionContext, Injectable, NotFoundException, Unauthori
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Request } from 'express';
-import { MemberTenant } from 'src/tenant/entities/member-tenant.entity';
+import { User } from 'src/auth/entities/user.entity';
 import { Permission } from '../entities/permission.entity';
-import { Role } from '../entities/role.entity';
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -12,14 +11,11 @@ export class RolesGuard implements CanActivate {
     constructor(
         private reflector: Reflector,
 
-        @InjectRepository(MemberTenant)
-        private readonly memberTenantRepository: Repository<MemberTenant>,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
 
         @InjectRepository(Permission)
         private readonly permissionRepository: Repository<Permission>,
-
-        @InjectRepository(Role)
-        private readonly roleRepository: Repository<Role>
     ) { }
 
     async canActivate(
@@ -32,18 +28,14 @@ export class RolesGuard implements CanActivate {
 
         const req = context.switchToHttp().getRequest<Request>();
         const userId = req.userId;
-        const tenantId = req.tenantId;
 
-        const memberTenant = await this.memberTenantRepository.findOne({
-            where: {
-                tenant: { id: tenantId },
-                user: { id: userId }
-            },
-            relations: ['role', 'user']
+        const user = await this.userRepository.findOne({
+            where: { id: userId },
+            relations: ['role', 'role.permissions']
         });
 
-        if (!memberTenant) {
-            throw new UnauthorizedException("El usuario debe pertenecer a un área de trabajo");
+        if (!user || !user.role) {
+            throw new UnauthorizedException("El usuario no tiene un rol asignado");
         }
 
         const requiredPermissions = await this.permissionRepository.find({
@@ -54,17 +46,8 @@ export class RolesGuard implements CanActivate {
             throw new NotFoundException("No existen todos los permisos requeridos");
         }
 
-        const roleWithPermissions = await this.roleRepository.findOne({
-            where: { id: memberTenant.role.id },
-            relations: ['permissions']
-        });
-
-        if (!roleWithPermissions) {
-            throw new NotFoundException("No se encontró el rol del usuario");
-        }
-
         const hasAllPermissions = requiredPermissions.every(reqPerm =>
-            roleWithPermissions.permissions.some(rolePerm =>
+            user.role.permissions.some(rolePerm =>
                 rolePerm.id === reqPerm.id || rolePerm.description === reqPerm.description
             )
         );
