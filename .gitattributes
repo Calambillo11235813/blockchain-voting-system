@@ -1,0 +1,37 @@
+# Normaliza finales de linea en el repositorio.
+# Objetivo: que el codigo quede en LF (ideal para Docker/Linux) y evitar diffs masivos por CRLF.
+
+# Detecta archivos de texto automaticamente y normaliza a LF al commitear
+* text=auto eol=lf
+
+# Archivos de cÃ³digo/documentaciÃ³n (forzar LF)
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.env text eol=lf
+*.example text eol=lf
+
+# Scripts Windows (mantener CRLF)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell scripts (LF)
+*.sh text eol=lf
+
+# Binarios (no tocar)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.svg binary
+*.ico binary
+*.pdf binary
