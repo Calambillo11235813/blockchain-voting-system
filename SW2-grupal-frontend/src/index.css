@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* Estilos base mínimos (Tailwind se encarga del resto). */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
