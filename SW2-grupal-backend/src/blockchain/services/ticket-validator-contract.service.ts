@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { firstValueFrom } from 'rxjs';
@@ -8,26 +8,44 @@ import ticketValidatorAbi from '../abis/contracts/TicketValidator.json';
 @Injectable()
 export class TicketValidatorContractService {
     private readonly hardhatMicroserviceUrl: string;
-    private readonly provider: ethers.JsonRpcProvider;
-    private readonly wallet: ethers.Wallet;
+    private readonly provider?: ethers.JsonRpcProvider;
+    private readonly wallet?: ethers.Wallet;
+    private readonly enabled: boolean;
 
     constructor(
         private readonly configService: ConfigService,
         private readonly httpService: HttpService,
     ) {
         this.hardhatMicroserviceUrl = this.configService.get<string>('hardhat_microservice_url');
+        this.enabled = Boolean(this.configService.get<boolean>('enable_blockchain'));
+
+        if (!this.enabled) {
+            return;
+        }
+
         const providerUrl = this.configService.get<string>('blockchain_url');
         const privateKeyRaw = this.configService.get<string>('wallet_private_key');
-        if (!privateKeyRaw) {
-            throw new Error('wallet_private_key is not configured');
+        if (!providerUrl || !privateKeyRaw) {
+            throw new ServiceUnavailableException('Blockchain is enabled but missing BLOCKCHAIN_URL or WALLET_PRIVATE_KEY');
         }
+
         const trimmedKey = privateKeyRaw.trim();
         const normalizedPrivateKey = trimmedKey.startsWith('0x') ? trimmedKey : `0x${trimmedKey}`;
         this.provider = new ethers.JsonRpcProvider(providerUrl);
         this.wallet = new ethers.Wallet(normalizedPrivateKey, this.provider);
     }
 
+    private assertEnabled(): void {
+        if (!this.enabled) {
+            throw new ServiceUnavailableException('Blockchain integration is disabled. Set ENABLE_BLOCKCHAIN=true to enable it.');
+        }
+        if (!this.wallet) {
+            throw new ServiceUnavailableException('Blockchain wallet is not initialized. Check BLOCKCHAIN_URL and WALLET_PRIVATE_KEY.');
+        }
+    }
+
     private getContractConfig() {
+        this.assertEnabled();
         const contractAddress = this.configService.get<string>('ticket_validator_address');
         if (!contractAddress) {
             throw new BadRequestException('ticket_validator_address is not configured');
@@ -41,6 +59,10 @@ export class TicketValidatorContractService {
     }
 
     async deployTicketValidatorContract(): Promise<{ contractAddress: string }> {
+        this.assertEnabled();
+        if (!this.hardhatMicroserviceUrl) {
+            throw new ServiceUnavailableException('HARDHAT_MICROSERVICE_URL is not configured');
+        }
         try {
             // Paso 1: Desplegar el contrato
             const response = await firstValueFrom(
@@ -78,6 +100,7 @@ export class TicketValidatorContractService {
         eventId: string,
         sectionName: string,
     ) {
+        this.assertEnabled();
         const { contractAddress, tenantId, tenantName } = this.getContractConfig();
         const ticketContract = new ethers.Contract(contractAddress, ticketValidatorAbi.abi, this.wallet);
 
@@ -118,6 +141,7 @@ export class TicketValidatorContractService {
      * @returns Información de validación del ticket.
      */
     async verifyTicket(ticketId: string) {
+        this.assertEnabled();
         if (!ticketId) {
             throw new BadRequestException('El parámetro "ticketId" es requerido.');
         }
@@ -157,6 +181,7 @@ export class TicketValidatorContractService {
      * @returns Información asociada al hash.
      */
     async verifyValidationHash(validationHash: string) {
+        this.assertEnabled();
         if (!validationHash) {
             throw new BadRequestException('El parámetro "validationHash" es requerido.');
         }
@@ -194,6 +219,7 @@ export class TicketValidatorContractService {
      * @returns Estadísticas generales.
      */
     async getTenantStats() {
+        this.assertEnabled();
         const { contractAddress, tenantId } = this.getContractConfig();
         const ticketContract = new ethers.Contract(contractAddress, ticketValidatorAbi.abi, this.wallet);
 
@@ -215,6 +241,7 @@ export class TicketValidatorContractService {
      * @returns Estadísticas del evento.
      */
     async getEventStats(eventId: string) {
+        this.assertEnabled();
         if (!eventId) {
             throw new BadRequestException('El parámetro "eventId" es requerido.');
         }
@@ -239,6 +266,7 @@ export class TicketValidatorContractService {
      * @returns Estadísticas del validador.
      */
     async getValidatorStats(validatorId: string) {
+        this.assertEnabled();
         if (!validatorId) {
             throw new BadRequestException('El parámetro "validatorId" es requerido.');
         }

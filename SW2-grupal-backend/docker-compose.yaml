@@ -13,37 +13,17 @@
 #       - ./postgres:/var/lib/postgresql/data
 
 
-# solo backend service for development
+# postgres only
 services:
-  backend-evently:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      # target: development
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env
-    # environment:
-    #   - NODE_ENV=development
-    command: pnpm run start:dev
+  db:
+    image: postgres:14.3
     restart: always
-
-
-# solo postgres service for development
-# services:
-#   db:
-#     image: postgres:14.3
-#     restart: always
-#     ports:
-#       - "5433:5432"
-#     environment:
-#       POSTGRES_USER: ${DB_USER}
-#       POSTGRES_PASSWORD: ${DB_PASSWORD}
-#       POSTGRES_DB: ${DB_NAME}
-#     container_name: event-university-db
-#     volumes:
-#       - ./postgres:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    container_name: event-university-db
+    volumes:
+      - ./postgres:/var/lib/postgresql/data

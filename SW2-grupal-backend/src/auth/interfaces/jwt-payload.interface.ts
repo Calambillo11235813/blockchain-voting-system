@@ -1,5 +1,7 @@
 export interface JwtPayload {
-    userId?: string;
+    sub: string;
+    registro: string;
+    role: 'ESTUDIANTE';
     iat?: number;
     exp?: number;
 }

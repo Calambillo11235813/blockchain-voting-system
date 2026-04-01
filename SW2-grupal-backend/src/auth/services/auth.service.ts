@@ -1,50 +1,46 @@
-import { BadRequestException, HttpStatus, Injectable, InternalServerErrorException } from '@nestjs/common';
+import { HttpStatus, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ApiResponse } from 'src/common/interfaces/response.interface';
-import { UserService } from 'src/estudiantes/usuarios/services/user.service';
 import { LoginDTO } from 'src/auth/dto/login.dto';
-import { AuthResponse, PayloadToken } from 'src/auth/interfaces/auth.interface';
+import { AuthResponse } from 'src/auth/interfaces/auth.interface';
+import { EstudiantesService } from 'src/estudiantes/estudiantes.service';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
-import { compare } from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly userService: UserService,
+    private readonly estudiantesService: EstudiantesService,
     private readonly jwtService: JwtService,
 
   ) { }
 
 
   /**
-   * Método para iniciar sesión en el sistema SaaS
-   * @param loginDTO Datos de inicio de sesión
+   * Inicia sesión de estudiante (HU-002).
+   * @param loginDTO Datos de inicio de sesión.
+   * @returns Token JWT.
+   * @throws UnauthorizedException si las credenciales no son válidas o el estudiante no está habilitado.
    */
-  async loginSaaS(loginDTO: LoginDTO): Promise<ApiResponse<AuthResponse>> {
+  async loginEstudiante(loginDTO: LoginDTO): Promise<ApiResponse<AuthResponse>> {
     try {
-      const { email, password } = loginDTO;
+      const { registro, password } = loginDTO;
 
-      const user = await this.userService.findUser({
-        where: [
-          email ? { email } : null,
-        ]
-      });
+      const estudiante = await this.estudiantesService.buscarEstudiantePorRegistro(registro);
 
-      if (!user) {
-        throw new BadRequestException("Usuario no encontrado");
+      if (!estudiante || !estudiante.estaHabilitado) {
+        throw new UnauthorizedException('Credenciales inválidas');
       }
 
-      const passwordValidate = await compare(
-        password,
-        user.password
-      );
+      const expectedPassword = this.calcularPasswordEsperado(estudiante.apellidos, estudiante.ci);
 
-      if (!passwordValidate) {
-        throw new BadRequestException("Contraseña incorrecta");
+      if (String(password || '').trim() !== expectedPassword) {
+        throw new UnauthorizedException('Credenciales inválidas');
       }
 
-      const payload: PayloadToken = {
-        userId: user.id
+      const payload: JwtPayload = {
+        sub: estudiante.id,
+        registro: estudiante.registro,
+        role: 'ESTUDIANTE',
       };
 
       const token = this.getToken(payload);
@@ -53,12 +49,11 @@ export class AuthService {
         statusCode: HttpStatus.OK,
         message: "Inicio de sesión exitoso",
         data: {
-          user,
           token
         }
       };
     } catch (error) {
-      if (error instanceof BadRequestException) {
+      if (error instanceof UnauthorizedException) {
         throw error;
       }
       throw new InternalServerErrorException(`Error del servidor: ${JSON.stringify(error)}`);
@@ -69,5 +64,17 @@ export class AuthService {
   private getToken(payload: JwtPayload): string {
     const token = this.jwtService.sign(payload);
     return token;
+  }
+
+  private calcularPasswordEsperado(apellidos: string, ci: string): string {
+    const initials = String(apellidos || '')
+      .trim()
+      .split(/\s+/)
+      .filter(word => word.length > 0)
+      .map(word => word[0])
+      .join('')
+      .toUpperCase();
+
+    return `${initials}${String(ci || '').trim()}`;
   }
 }

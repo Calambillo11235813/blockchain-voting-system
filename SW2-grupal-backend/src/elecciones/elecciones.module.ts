@@ -15,8 +15,8 @@ import { TicketController } from './controllers/ticket.controller';
 import { TicketService } from './services/ticket.service';
 import { Ticket } from './entities/ticket.entity';
 import { PublicEventController } from './controllers/public-event.controller';
-import { TicketValidatorContractService } from 'src/blockchain/services/ticket-validator-contract.service';
 import { HttpModule } from '@nestjs/axios';
+import { BlockchainModule } from 'src/blockchain/blockchain.module';
 
 @Module({
   imports: [
@@ -27,7 +27,8 @@ import { HttpModule } from '@nestjs/axios';
       Ticket
     ]),
     UserModule,
-    HttpModule
+    HttpModule,
+    BlockchainModule
   ],
   controllers: [
     EventController,
@@ -37,7 +38,6 @@ import { HttpModule } from '@nestjs/axios';
     PublicEventController
   ],
   providers: [
-    TicketValidatorContractService,
     EventService,
     FacultyService,
     SectionService,

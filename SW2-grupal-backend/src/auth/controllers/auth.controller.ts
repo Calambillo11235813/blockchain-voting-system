@@ -6,12 +6,29 @@ import { LoginDTO } from 'src/auth/dto/login.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
+  /**
+   * Login de estudiante (HU-002).
+   * @param loginDTO registro y password.
+   * @returns Token JWT.
+   */
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body() loginDTO: LoginDTO,
+  ) {
+    return this.authService.loginEstudiante(loginDTO);
+  }
+
+  /**
+   * Compatibilidad temporal: endpoint heredado de plantilla SaaS.
+   * Recomendado eliminar cuando el frontend use /auth/login.
+   */
   @Post('login-saas')
   @HttpCode(HttpStatus.OK)
   async loginSaaS(
     @Body() loginDTO: LoginDTO,
   ) {
-    return this.authService.loginSaaS(loginDTO);
+    return this.authService.loginEstudiante(loginDTO);
   }
 
   // Estos métodos están comentados en el servicio, así que los comentaré aquí también

@@ -5,32 +5,35 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 
-import { User } from 'src/auth/entities/user.entity';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
+import { Estudiante } from 'src/estudiantes/entities/estudiante.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
+    @InjectRepository(Estudiante)
+    private readonly estudianteRepository: Repository<Estudiante>,
     configService: ConfigService,
   ) {
     super({
-      secretOrKey: configService.get<string>('SECRET_KEY_JWT'),
+      secretOrKey: configService.get<string>('secret_key_jwt') || configService.get<string>('SECRET_KEY_JWT'),
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
     });
   }
 
-  async validate(payload: JwtPayload): Promise<User> {
-    const { userId } = payload;
-    const user = await this.userRepository.findOne({
-      where: [
-        { id: userId },
-      ]
+  async validate(payload: JwtPayload): Promise<Estudiante> {
+    const estudiante = await this.estudianteRepository.findOne({
+      where: { id: payload.sub },
     });
-    if (!user) throw new UnauthorizedException('token not valid');
-    if (!user.state)
-      throw new UnauthorizedException('user is inactive, talk with an admin');
-    return user;
+
+    if (!estudiante) {
+      throw new UnauthorizedException('token not valid');
+    }
+
+    if (!estudiante.estaHabilitado) {
+      throw new UnauthorizedException('estudiante no habilitado');
+    }
+
+    return estudiante;
   }
 }

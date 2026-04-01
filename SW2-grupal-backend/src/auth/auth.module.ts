@@ -10,16 +10,20 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './strategy/jwt.strategy';
 import { AuthSaasGuard } from './guards/auth-saas.guard';
 import { UserModule } from 'src/estudiantes/usuarios/user.module';
+import { EstudiantesModule } from 'src/estudiantes/estudiantes.module';
+import { Estudiante } from 'src/estudiantes/entities/estudiante.entity';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, AuthSaasGuard],
   imports: [
+    EstudiantesModule,
     UserModule,
     TypeOrmModule.forFeature([
       User,
       Role,
       Permission,
+      Estudiante,
       
     ]),
     JwtModule.registerAsync({
@@ -40,10 +44,12 @@ import { UserModule } from 'src/estudiantes/usuarios/user.module';
       User,
       Role,
       Permission,
+      Estudiante,
       
     ]),
     AuthSaasGuard,
     UserModule,
+    EstudiantesModule,
   ]
 })
 export class AuthModule { }

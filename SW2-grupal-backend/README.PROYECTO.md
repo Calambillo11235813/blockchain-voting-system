@@ -25,17 +25,7 @@ La API corre con prefijo global: ` /api `.
 - **Tooling**: pnpm, ESLint, Prettier, Jest
 - **Docker**: `Dockerfile` + `docker-compose.yaml`
 
-## Módulos principales (src/)
-- `auth/`: login y guards (SaaS y tenant)
-- `tenant/`: tenants, suscripciones, membresías
-- `event/`: gestión de eventos, secciones y tickets
-- `payment/`: pagos, compras, webhooks de Stripe
-- `blockchain/`: despliegue/interacción con contrato TicketValidator
-- `aws/`: OCR y comparación facial (Textract/Rekognition)
-- `cloudinary/`: integración para imágenes
-- `audit/`: auditoría/registro
-- `seed/`: datos semilla
-- `chatbot/`: endpoint de chatbot
+
 
 ## Cómo ejecutar
 ### Requisitos
@@ -62,16 +52,12 @@ El proyecto valida el `.env` con Joi. Debes definir al menos:
 - `PORT`
 - DB: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
 - JWT: `SECRET_KEY_JWT`
-- Stripe: `STRIPE_KEY`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`, `STRIPE_TICKET_WEBHOOK_SECRET`, `STRIPE_TENANT_WEBHOOK_SECRET`
-- Cloudinary: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
 - Frontend: `FRONTEND_URL`
 - Blockchain/Microservicio:
   - `HARDHAT_MICROSERVICE_URL`
   - `BLOCKCHAIN_URL`
   - `WALLET_PRIVATE_KEY`
-- AWS:
-  - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
-  - `AWS_ACCESS_KEY_ID_TEXTRACT`, `AWS_SECRET_ACCESS_KEY_TEXTRACT`
+
 
 Revisa el esquema en `src/config/env/env.schema.ts` para la lista completa y formatos esperados.
 
