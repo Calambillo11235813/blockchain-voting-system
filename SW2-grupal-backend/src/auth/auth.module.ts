@@ -12,12 +12,14 @@ import { AuthSaasGuard } from './guards/auth-saas.guard';
 import { UserModule } from 'src/estudiantes/usuarios/user.module';
 import { EstudiantesModule } from 'src/estudiantes/estudiantes.module';
 import { Estudiante } from 'src/estudiantes/entities/estudiante.entity';
+import { AdminsModule } from 'src/admins/admins.module';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, AuthSaasGuard],
   imports: [
     EstudiantesModule,
+    AdminsModule,
     UserModule,
     TypeOrmModule.forFeature([
       User,

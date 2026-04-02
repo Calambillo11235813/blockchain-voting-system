@@ -13,6 +13,7 @@ import { UserModule } from './estudiantes/usuarios/user.module';
 import { CommonModule } from './common/common.module';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { AdminsModule } from './admins/admins.module';
 
 
 @Module({
@@ -56,6 +57,7 @@ import { join } from 'path';
     SeedModule,
     UserModule,
     CommonModule,
+    AdminsModule,
   ],
   // providers: [
   //   LogsService,

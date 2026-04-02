@@ -1,6 +1,9 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { AuthService } from 'src/auth/services/auth.service';
 import { LoginDTO } from 'src/auth/dto/login.dto';
+import { LoginAdminDto } from 'src/auth/dto/login-admin.dto';
+import { ApiResponse } from 'src/common/interfaces/response.interface';
+import { AuthResponse } from 'src/auth/interfaces/auth.interface';
 
 @Controller('auth')
 export class AuthController {
@@ -10,13 +13,28 @@ export class AuthController {
    * Login de estudiante (HU-002).
    * @param loginDTO registro y password.
    * @returns Token JWT.
+   * @throws UnauthorizedException si las credenciales no son válidas.
    */
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() loginDTO: LoginDTO,
-  ) {
-    return this.authService.loginEstudiante(loginDTO);
+  ): Promise<ApiResponse<AuthResponse>> {
+    return await this.authService.loginEstudiante(loginDTO);
+  }
+
+  /**
+   * Login de administrador (Corte Electoral).
+   * @param loginAdminDto correo y password.
+   * @returns Token JWT con rol ADMIN.
+   * @throws UnauthorizedException si las credenciales no son válidas.
+   */
+  @Post('login-admin')
+  @HttpCode(HttpStatus.OK)
+  async loginAdmin(
+    @Body() loginAdminDto: LoginAdminDto,
+  ): Promise<ApiResponse<AuthResponse>> {
+    return await this.authService.loginAdministrador(loginAdminDto);
   }
 
   /**
@@ -27,8 +45,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async loginSaaS(
     @Body() loginDTO: LoginDTO,
-  ) {
-    return this.authService.loginEstudiante(loginDTO);
+  ): Promise<ApiResponse<AuthResponse>> {
+    return await this.authService.loginEstudiante(loginDTO);
   }
 
   // Estos métodos están comentados en el servicio, así que los comentaré aquí también

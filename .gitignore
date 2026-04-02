@@ -1,0 +1,72 @@
+# Root .gitignore (aplica a todo el repo)
+
+# Dependencies
+**/node_modules/
+
+# Build outputs
+**/dist/
+**/build/
+**/dist-ssr/
+**/*.tsbuildinfo
+
+# Logs
+**/logs/
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Test coverage
+**/coverage/
+**/.nyc_output/
+
+# Environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Temp / caches
+**/.temp/
+**/.tmp/
+**/temp/
+**/.vite/
+**/.eslintcache
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# Editors / IDEs
+**/.idea/
+**/.classpath
+**/.project
+**/.settings/
+
+# VS Code (mantener settings opcionales)
+**/.vscode/*
+!**/.vscode/settings.json
+!**/.vscode/tasks.json
+!**/.vscode/launch.json
+!**/.vscode/extensions.json
+
+# Runtime data
+**/pids
+**/*.pid
+**/*.pid.lock
+**/*.seed
+
+# Docker / local DB volumes
+**/postgres/
+
+# Hardhat / blockchain artifacts (zksync/hardhat)
+**/.hardhat/
+**/cache/
+**/cache-*/
+**/artifacts/
+**/artifacts-*/
+**/typechain/
+**/typechain-types/
+**/coverage/
+**/gas-report.txt

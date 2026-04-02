@@ -1,7 +1,10 @@
+export type RolUsuario = 'ESTUDIANTE' | 'ADMIN';
+
 export interface JwtPayload {
     sub: string;
-    registro: string;
-    role: 'ESTUDIANTE';
+    role: RolUsuario;
+    registro?: string;
+    correo?: string;
     iat?: number;
     exp?: number;
 }
