@@ -72,7 +72,7 @@ export default function CoalitionsSection({
           cargoId: coalitionForm.cargoId,
           ...(logoUrl ? { logoUrl } : {}),
         })
-        setSuccessMessage('Frente actualizado correctamente.')
+        setSuccessMessage('Actualización exitosa')
       } else {
         await createFrente({
           nombreFrente: coalitionForm.nombreFrente.trim(),
@@ -80,7 +80,7 @@ export default function CoalitionsSection({
           cargoId: coalitionForm.cargoId,
           ...(logoUrl ? { logoUrl } : {}),
         })
-        setSuccessMessage('Frente registrado correctamente.')
+        setSuccessMessage('Registro exitoso')
       }
 
       const updatedFrentes = await fetchFrentes()
@@ -122,7 +122,7 @@ export default function CoalitionsSection({
       await deleteFrente(coalitionId)
       const updatedFrentes = await fetchFrentes()
       setCoalitions(updatedFrentes)
-      setSuccessMessage('Frente eliminado correctamente.')
+      setSuccessMessage('Eliminación exitosa')
 
       if (editingCoalitionId === coalitionId) {
         setEditingCoalitionId('')
@@ -265,7 +265,7 @@ export default function CoalitionsSection({
               />
             ) : null}
           </div>
-          <p className="mt-1 text-xs text-slate-600">Formatos permitidos: JPG, PNG, WEBP (máx. 5MB)</p>
+          <p className="mt-1 text-xs text-slate-600">Formatos permitidos: JPG, PNG, WEBP (máx. 10MB)</p>
         </Field>
       </div>
 

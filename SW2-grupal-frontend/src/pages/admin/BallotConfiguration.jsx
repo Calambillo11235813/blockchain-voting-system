@@ -24,6 +24,64 @@ export default function BallotConfiguration() {
     return `${election.titulo} (${election.gestion})`
   }, [elections, selectedElectionId])
 
+  const ballotColumns = useMemo(() => {
+    if (!ballot?.cargos?.length) return []
+
+    const cargoOrder = ballot.cargos.map((cargo) => ({
+      id: cargo.id,
+      nombre: cargo.nombre,
+      facultad: cargo.facultad,
+    }))
+
+    const groupMap = new Map()
+
+    for (const cargo of ballot.cargos) {
+      for (const frente of cargo.frentes || []) {
+        const siglaKey = String(frente.sigla || '').trim().toUpperCase()
+        const nameKey = String(frente.nombreFrente || '').trim().toLowerCase()
+        const groupKey = `${siglaKey}|${nameKey}`
+
+        const existing = groupMap.get(groupKey)
+        const group = existing || {
+          key: groupKey,
+          nombreFrente: String(frente.nombreFrente || '').trim(),
+          sigla: siglaKey,
+          logoUrl: frente.logoUrl || '',
+          cargos: new Map(),
+        }
+
+        // Guardamos candidatos asociados a este cargo y frente.
+        group.cargos.set(cargo.id, {
+          cargoId: cargo.id,
+          cargoNombre: cargo.nombre,
+          facultad: cargo.facultad,
+          candidatos: frente.candidatos || [],
+        })
+
+        // Si algún frente trae logo y el grupo aún no tiene, lo usamos.
+        if (!group.logoUrl && frente.logoUrl) {
+          group.logoUrl = frente.logoUrl
+        }
+
+        if (!existing) groupMap.set(groupKey, group)
+      }
+    }
+
+    const columns = Array.from(groupMap.values())
+      .map((group) => ({
+        ...group,
+        cargoOrder,
+      }))
+      .sort((a, b) => {
+        const aSigla = a.sigla || ''
+        const bSigla = b.sigla || ''
+        if (aSigla !== bSigla) return aSigla.localeCompare(bSigla)
+        return String(a.nombreFrente || '').localeCompare(String(b.nombreFrente || ''))
+      })
+
+    return columns
+  }, [ballot])
+
   useEffect(() => {
     let isMounted = true
 
@@ -127,7 +185,7 @@ export default function BallotConfiguration() {
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-base font-semibold text-blue-900">Previsualización</h3>
+            <h3 className="text-base font-semibold text-blue-900">Papeleta Digital de Votación</h3>
             <p className="mt-1 text-sm text-slate-700">
               {selectedElectionLabel || 'Seleccione una elección para ver la papeleta.'}
             </p>
@@ -152,77 +210,103 @@ export default function BallotConfiguration() {
             </p>
           </div>
         ) : ballot.cargos?.length ? (
-          <div className="mt-5 space-y-6">
-            {ballot.cargos.map((cargo) => (
-              <div key={cargo.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-blue-900">{cargo.nombre}</p>
-                    <p className="text-xs text-slate-700">{cargo.facultad}</p>
-                  </div>
-                  <p className="text-xs text-slate-600">
-                    {cargo.frentes?.length ? `${cargo.frentes.length} frentes` : 'Sin frentes'}
-                  </p>
-                </div>
+          <div className="mt-5">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-sm font-semibold text-slate-900">Frentes</p>
+              <p className="mt-1 text-sm text-slate-700">
+                Compare fácilmente los frentes y sus candidatos por cargo.
+              </p>
+            </div>
 
-                {cargo.frentes?.length ? (
-                  <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {cargo.frentes.map((frente) => (
-                      <div key={frente.id} className="rounded-xl border border-slate-200 bg-white p-4">
-                        <div className="flex items-center gap-3">
-                          {frente.logoUrl ? (
-                            <img
-                              src={frente.logoUrl}
-                              alt="Logo del frente"
-                              className="h-10 w-10 rounded-lg border border-slate-200 object-cover"
-                            />
-                          ) : (
-                            <div className="h-10 w-10 rounded-lg border border-slate-200 bg-slate-50" />
-                          )}
-
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900">{frente.nombreFrente}</p>
-                            <p className="text-xs text-slate-700">Sigla: {frente.sigla}</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Candidatos</p>
-
-                          {frente.candidatos?.length ? (
-                            <div className="mt-3 space-y-2">
-                              {frente.candidatos.map((candidate) => (
-                                <div
-                                  key={candidate.id}
-                                  className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
-                                >
-                                  {candidate.fotoUrl ? (
-                                    <img
-                                      src={candidate.fotoUrl}
-                                      alt="Foto del candidato"
-                                      className="h-9 w-9 rounded-lg border border-slate-200 object-cover"
-                                    />
-                                  ) : (
-                                    <div className="h-9 w-9 rounded-lg border border-slate-200 bg-slate-50" />
-                                  )}
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    {candidate.nombres} {candidate.apellidos}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="mt-2 text-sm text-slate-700">No hay candidatos registrados.</p>
-                          )}
-                        </div>
+            {ballotColumns.length ? (
+              <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {ballotColumns.map((column) => (
+                  <div key={column.key} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                      <div className="h-28 w-28 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                        {column.logoUrl ? (
+                          <img
+                            src={column.logoUrl}
+                            alt="Logo del frente"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full rounded-xl border border-slate-200 bg-slate-50" />
+                        )}
                       </div>
-                    ))}
+
+                      <div className="w-full">
+                        <p className="break-words text-sm font-semibold text-slate-900">
+                          {column.nombreFrente || 'Frente'}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-700">Sigla: {column.sigla || '—'}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-4">
+                      {column.cargoOrder.map((cargo) => {
+                        const cargoData = column.cargos.get(cargo.id)
+                        const candidates = cargoData?.candidatos || []
+
+                        return (
+                          <div key={cargo.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold uppercase tracking-wide text-slate-700">
+                                  {cargo.nombre}
+                                </p>
+                                {cargo.facultad ? (
+                                  <p className="truncate text-xs text-slate-600">{cargo.facultad}</p>
+                                ) : null}
+                              </div>
+                              <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
+                                {candidates.length || 0}
+                              </span>
+                            </div>
+
+                            {candidates.length ? (
+                              <div className="mt-3 space-y-2">
+                                {candidates.map((candidate) => (
+                                  <div
+                                    key={candidate.id}
+                                    className="flex flex-col items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-center"
+                                  >
+                                    {candidate.fotoUrl ? (
+                                      <img
+                                        src={candidate.fotoUrl}
+                                        alt="Foto del candidato"
+                                        className="h-50 w-50 shrink-0 rounded-2xl border border-slate-200 object-cover"
+                                      />
+                                    ) : (
+                                      <div className="h-50 w-50 shrink-0 rounded-2xl border border-slate-200 bg-slate-50" />
+                                    )}
+                                    <div className="w-full min-w-0">
+                                      <p className="truncate text-base font-semibold text-slate-900">
+                                        {candidate.nombres} 
+                                      </p>
+                                      
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-slate-700">Sin candidato registrado.</p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                ) : (
-                  <p className="mt-3 text-sm text-slate-700">No hay frentes registrados para este cargo.</p>
-                )}
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-semibold text-slate-900">Sin frentes registrados</p>
+                <p className="mt-1 text-sm text-slate-700">
+                  Registre frentes y candidatos para ver la papeleta en formato de columnas.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">

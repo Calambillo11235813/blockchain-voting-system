@@ -109,7 +109,7 @@ export default function CandidatesSection({
           frenteId: candidateForm.frenteId,
           ...(fotoUrl ? { fotoUrl } : {}),
         })
-        setSuccessMessage('Candidato actualizado correctamente.')
+        setSuccessMessage('Actualización exitosa')
       } else {
         await createCandidate({
           ci: candidateForm.ci.trim(),
@@ -118,7 +118,7 @@ export default function CandidatesSection({
           frenteId: candidateForm.frenteId,
           ...(fotoUrl ? { fotoUrl } : {}),
         })
-        setSuccessMessage('Candidato registrado correctamente.')
+        setSuccessMessage('Registro exitoso')
       }
 
       const updatedCandidates = await fetchCandidates()
@@ -169,7 +169,7 @@ export default function CandidatesSection({
       await deleteCandidate(candidateId)
       const updatedCandidates = await fetchCandidates()
       setCandidates(updatedCandidates)
-      setSuccessMessage('Candidato eliminado correctamente.')
+      setSuccessMessage('Eliminación exitosa')
 
       if (editingCandidateId === candidateId) {
         setEditingCandidateId('')
@@ -351,7 +351,7 @@ export default function CandidatesSection({
               />
             ) : null}
           </div>
-          <p className="mt-1 text-xs text-slate-600">Formatos permitidos: JPG, PNG, WEBP (máx. 5MB)</p>
+          <p className="mt-1 text-xs text-slate-600">Formatos permitidos: JPG, PNG, WEBP (máx. 10MB)</p>
         </Field>
       </div>
 

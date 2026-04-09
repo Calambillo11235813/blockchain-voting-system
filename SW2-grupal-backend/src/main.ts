@@ -2,14 +2,20 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { CORS } from './compartido/cors';
-import { json } from 'express';
+import { json, urlencoded } from 'express';
+import { NestExpressApplication } from '@nestjs/platform-express';
 // import * as fs from 'fs';
 // import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 
 async function bootstrap() {
   // const SSL_CRT_PATH = process.env.SSL_CRT_PATH;
 
-  const app = await NestFactory.create(AppModule);
+  // Importante:
+  // - NestJS registra body-parser por defecto.
+  // - Para aceptar imágenes en base64 (JSON grandes) necesitamos controlar el límite.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
 
   // if (SSL_CRT_PATH) {
   //   try {
@@ -37,11 +43,8 @@ async function bootstrap() {
     })
   );
 
-  app.use(
-    json({
-      limit: '10mb',
-    })
-  );
+  app.use(json({ limit: '15mb' }));
+  app.use(urlencoded({ extended: true, limit: '15mb' }));
 
   app.enableCors(CORS);
   await app.listen(port, () => {
