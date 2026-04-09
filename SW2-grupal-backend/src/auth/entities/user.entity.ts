@@ -1,5 +1,4 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { IdentityVerification } from "src/estudiantes/identidad/entities/identity-verification.entity";
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Role } from "./role.entity";
 
 @Entity()
@@ -86,9 +85,6 @@ export class User {
     is_policy_accepted: boolean;
 
     //?RELATIONS
-    @OneToMany(() => IdentityVerification, iv => iv.user)
-    identityVerifications: IdentityVerification[];
-
     @ManyToOne(() => Role, {
         nullable: true
     })

@@ -2,7 +2,7 @@ import { BadRequestException, Controller, HttpCode, HttpStatus, Post, UploadedFi
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { EstudiantesService } from './estudiantes.service';
-import { ApiResponse } from 'src/common/interfaces/response.interface';
+import { ApiResponse } from 'src/compartido/respuesta';
 
 @Controller('estudiantes')
 export class EstudiantesController {

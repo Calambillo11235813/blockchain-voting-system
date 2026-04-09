@@ -1,50 +1,45 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Event } from './entities/event.entity';
-import { Section } from './entities/section.entity';
-import { Faculty } from './entities/faculty.entity';
-import { EventService } from './services/event.service';
-import { EventController } from './controllers/event.controller';
-// import { SectionService } from './services/section.service';
-import { UserModule } from '../estudiantes/usuarios/user.module';
-import { FacultyService } from './services/faculty.service';
-import { FacultyController } from './controllers/faculty.controller';
-import { SectionController } from './controllers/section.controller';
-import { SectionService } from './services/section.service';
-import { TicketController } from './controllers/ticket.controller';
-import { TicketService } from './services/ticket.service';
-import { Ticket } from './entities/ticket.entity';
-import { PublicEventController } from './controllers/public-event.controller';
-import { HttpModule } from '@nestjs/axios';
-import { BlockchainModule } from 'src/blockchain/blockchain.module';
+import { Eleccion } from './entities/eleccion.entity';
+import { Cargo } from './entities/cargo.entity';
+import { Frente } from './entities/frente.entity';
+import { Candidato } from './entities/candidato.entity';
+import { EleccionesService } from './services/elecciones.service';
+import { EleccionesController } from 'src/elecciones/controllers/elecciones.controller';
+import { CargoController } from './controllers/cargo.controller';
+import { FrenteController } from './controllers/frente.controller';
+import { CandidatoController } from './controllers/candidato.controller';
+import { PapeletaController } from './controllers/papeleta.controller';
+import { CargoService } from './services/cargo.service';
+import { FrenteService } from './services/frente.service';
+import { CandidatoService } from './services/candidato.service';
+import { PapeletaService } from './services/papeleta.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Event,
-      Section,
-      Faculty,
-      Ticket
+      Eleccion,
+      Cargo,
+      Frente,
+      Candidato,
     ]),
-    UserModule,
-    HttpModule,
-    BlockchainModule
   ],
   controllers: [
-    EventController,
-    FacultyController,
-    SectionController,
-    TicketController,
-    PublicEventController
+    EleccionesController,
+    CargoController,
+    FrenteController,
+    CandidatoController,
+    PapeletaController,
   ],
   providers: [
-    EventService,
-    FacultyService,
-    SectionService,
-    TicketService,
+    EleccionesService,
+    CargoService,
+    FrenteService,
+    CandidatoService,
+    PapeletaService,
   ],
   exports: [
-    EventService,
-  ]
+    EleccionesService,
+  ],
 })
 export class EleccionesModule { }

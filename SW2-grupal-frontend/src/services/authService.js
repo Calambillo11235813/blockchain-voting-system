@@ -22,3 +22,26 @@ export async function loginStudent({ studentId, password }) {
 
   return { token }
 }
+
+/**
+ * Inicia sesión de administrador.
+ *
+ * Espera la respuesta del backend con el formato:
+ * `{ statusCode, message, data: { token } }`.
+ *
+ * @param {{ email: string, password: string }} params
+ * @returns {Promise<{ token: string }>} Token JWT
+ */
+export async function loginAdmin({ email, password }) {
+  const response = await api.post('/auth/login-admin', {
+    correo: email,
+    password,
+  })
+
+  const token = response?.data?.data?.token
+  if (!token) {
+    throw new Error('No se recibió el token del servidor.')
+  }
+
+  return { token }
+}

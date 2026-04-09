@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import {
   createContext,
   useCallback,
@@ -7,6 +9,7 @@ import {
   useState,
 } from 'react'
 import { setApiAuthToken } from '../services/api'
+import { getRoleFromToken } from '../utils/jwt'
 
 const STORAGE_KEY = 'auth.token'
 
@@ -32,40 +35,46 @@ export function useAuth() {
  * - Configura el header `Authorization: Bearer` en Axios.
  */
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(null)
+  const [token, setToken] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY)
+    } catch {
+      return null
+    }
+  })
   const [student, setStudent] = useState(null)
+  const [role, setRole] = useState(() => getRoleFromToken(token))
 
   useEffect(() => {
-    const storedToken = localStorage.getItem(STORAGE_KEY)
-    if (storedToken) {
-      setToken(storedToken)
-      setApiAuthToken(storedToken)
-    }
-  }, [])
+    setApiAuthToken(token)
+  }, [token])
 
   const login = useCallback(({ token: nextToken, student: nextStudent }) => {
     localStorage.setItem(STORAGE_KEY, nextToken)
     setToken(nextToken)
     setStudent(nextStudent || null)
-    setApiAuthToken(nextToken)
+    setRole(getRoleFromToken(nextToken))
   }, [])
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
     setToken(null)
     setStudent(null)
-    setApiAuthToken(null)
+    setRole(null)
   }, [])
 
   const value = useMemo(() => {
     return {
       token,
       student,
+      role,
       isAuthenticated: Boolean(token),
+      isAdmin: role === 'ADMIN',
+      isStudent: role === 'ESTUDIANTE',
       login,
       logout,
     }
-  }, [token, student, login, logout])
+  }, [token, student, role, login, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

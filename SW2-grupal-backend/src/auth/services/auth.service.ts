@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ApiResponse } from 'src/common/interfaces/response.interface';
+import { ApiResponse } from 'src/compartido/respuesta';
 import { LoginDTO } from 'src/auth/dto/login.dto';
 import { AuthResponse } from 'src/auth/interfaces/auth.interface';
 import { EstudiantesService } from 'src/estudiantes/estudiantes.service';

@@ -47,3 +47,27 @@ src/
 | **HU-003** | Administrador | Registrar a los candidatos y frentes estudiantiles. | Configurar la papeleta digital correctamente. |
 | **HU-004** | Administrador | Iniciar y finalizar el periodo de votación. | Controlar los tiempos de apertura y cierre de las urnas digitales. |
 | **HU-005** | Estudiante | Realizar verificación biométrica (facial/huella). | Garantizar que el voto sea emitido por mi persona y evitar la suplantación de identidad. | 
+
+
+### 4. Diseño y Paleta de Colores Institucional (FICCT - UAGRM)
+El diseño de la interfaz debe ser limpio, accesible y transmitir la formalidad de una elección universitaria. Toda la estilización (preferentemente usando Tailwind) DEBE basarse estrictamente en la siguiente paleta de colores extraída del escudo de la facultad:
+
+- **Color Primario (Fondo de cabeceras, barras de navegación, textos destacados):** Azul Institucional Profundo (`#0a3366` o clases equivalentes como `bg-blue-900` / `text-blue-900`).
+- **Color Secundario (Fondos generales, tarjetas de contenido, textos sobre azul):** Blanco (`#ffffff` o `bg-white`). El diseño debe tener mucho espacio en blanco para facilitar la lectura.
+- **Color de Acento / Acción Principal (Botones de "Votar", "Iniciar Sesión", iconos activos):** Dorado/Amarillo (`#f2a900` o clases como `bg-yellow-500`). Representa las estrellas del escudo.
+- **Color de Peligro / Error (Mensajes de error, eliminar candidato, logout):** Rojo (`#d32f2f` o clases como `text-red-600`). Representa los anillos del átomo en el escudo.
+
+**Regla de UI:** No utilices colores pastel ni degradados informales. Mantén un alto contraste (texto oscuro sobre fondo claro o texto claro sobre fondo oscuro) para garantizar la accesibilidad de todos los estudiantes.
+
+
+### 5. Estándares de Interfaz de Usuario (UI) y Experiencia de Usuario (UX)
+Para garantizar un acabado profesional digno de un proyecto de grado, la IA debe seguir estas reglas de presentación en la interfaz:
+
+- **Idioma de la UI:** El 100% de los textos visibles para el usuario (etiquetas, botones, mensajes, alertas, placeholders) DEBEN estar en **Español de Bolivia**. Nunca mezcles inglés en la vista.
+- **Eliminación de Jerga Técnica:** Está terminantemente PROHIBIDO mostrar IDs de Historias de Usuario (ej. HU-001), nombres de variables o términos técnicos de backend (ej. "Endpoint", "POST", "Whitelist", "Backend") en la interfaz gráfica.
+- **Terminología Institucional:** Sustituye términos técnicos por términos del dominio electoral:
+    - En lugar de "Whitelist", usa: **"Padrón Electoral"** o **"Lista de Estudiantes Habilitados"**.
+    - En lugar de "Upload Whitelist", usa: **"Cargar Padrón Oficial"**.
+    - En lugar de "Admin Dashboard", usa: **"Panel de Administración Electoral"**.
+- **Notas Técnicas:** La información sobre formatos de archivos o endpoints NO debe aparecer como texto plano en la pantalla. Si es necesario guiar al usuario, usa iconos de ayuda (tooltips) o mensajes sutiles como: "Formatos permitidos: .xlsx".
+- **Feedback de Usuario:** Los errores de servidor no deben mostrar el "stack trace" o el JSON del error. Deben mostrar mensajes amigables como: "Hubo un problema al conectar con el servidor. Inténtelo más tarde".

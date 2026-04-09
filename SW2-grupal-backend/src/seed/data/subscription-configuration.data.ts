@@ -1,4 +1,8 @@
-import { SubscriptionPlanTypeEnum } from 'src/common/enums/suscription-plan-type-enum/suscription-plan-type.enum';
+enum SubscriptionPlanTypeEnum {
+    BASIC = 'BASIC',
+    STANDARD = 'STANDARD',
+    PREMIUM = 'PREMIUM',
+}
 
 /**
  * Datos semilla para la entidad Subscription

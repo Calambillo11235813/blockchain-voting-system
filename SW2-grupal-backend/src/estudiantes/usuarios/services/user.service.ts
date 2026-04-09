@@ -3,13 +3,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, FindOptionsSelect, FindOptionsOrder } from 'typeorm';
 
 import { CreateUserDTO } from '../dto/create-user.dto';
-import { handleError } from 'src/common/helpers/function-helper';
+import { handleError } from 'src/compartido/manejo-errores';
 import { IOptionUser } from '../interface/option-user.interface';
 import { User } from 'src/auth/entities/user.entity';
 import { Role } from 'src/auth/entities/role.entity';
 import { GenderEnum } from '../enums/gender.enum';
 import { hashSync } from 'bcryptjs';
-import { ApiResponse } from 'src/common/interfaces/response.interface';
+import { ApiResponse } from 'src/compartido/respuesta';
 import { CreateUserResponse } from '../interface/user.interface';
 
 @Injectable()

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { CORS } from './common/constant/cors';
+import { CORS } from './compartido/cors';
 import { json } from 'express';
 // import * as fs from 'fs';
 // import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';

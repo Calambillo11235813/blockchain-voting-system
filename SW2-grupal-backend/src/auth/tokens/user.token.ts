@@ -1,6 +1,6 @@
 import * as jwt from 'jsonwebtoken';
 import { AuthTokenResult, IUseToken } from 'src/auth/interfaces/auth.interface';
-import { handleError } from 'src/common/helpers/function-helper';
+import { handleError } from 'src/compartido/manejo-errores';
 
 export const useTokenSaas = (token: string): IUseToken | string => {
     try {
