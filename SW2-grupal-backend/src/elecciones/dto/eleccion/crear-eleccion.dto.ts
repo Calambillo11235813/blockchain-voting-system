@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsString, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 /**
  * DTO para crear una eleccion facultativa.
@@ -13,10 +13,11 @@ export class CrearEleccionDto {
   gestion: number;
 
   @IsDateString()
-  fechaInicio: string;
+  fecha: string;
 
-  @IsDateString()
-  fechaFin: string;
+  @IsOptional()
+  @IsBoolean()
+  restriccionAlfabeticaActiva?: boolean;
 
   @IsBoolean()
   estaActiva: boolean;

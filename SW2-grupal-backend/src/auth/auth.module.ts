@@ -13,6 +13,7 @@ import { UserModule } from 'src/estudiantes/usuarios/user.module';
 import { EstudiantesModule } from 'src/estudiantes/estudiantes.module';
 import { Estudiante } from 'src/estudiantes/entities/estudiante.entity';
 import { AdminsModule } from 'src/admins/admins.module';
+import { EleccionesModule } from 'src/elecciones/elecciones.module';
 
 @Module({
   controllers: [AuthController],
@@ -20,6 +21,7 @@ import { AdminsModule } from 'src/admins/admins.module';
   imports: [
     EstudiantesModule,
     AdminsModule,
+    EleccionesModule,
     UserModule,
     TypeOrmModule.forFeature([
       User,

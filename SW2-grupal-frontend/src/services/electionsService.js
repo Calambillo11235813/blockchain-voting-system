@@ -17,7 +17,14 @@ import { api } from './api'
  */
 
 /**
- * @typedef {{ id: string, titulo: string, gestion: number, fechaInicio: string, fechaFin: string, estaActiva: boolean }} Election
+ * @typedef {{
+ *  id: string,
+ *  titulo: string,
+ *  gestion: number,
+ *  fecha: string,
+ *  estaActiva: boolean,
+ *  restriccionAlfabeticaActiva?: boolean,
+ * }} Election
  */
 
 /**
@@ -143,7 +150,7 @@ export async function fetchElections() {
 
 /**
  * Crea una elección.
- * @param {{ titulo: string, gestion: number, fechaInicio: string, fechaFin: string, estaActiva: boolean }} payload
+ * @param {{ titulo: string, gestion: number, fecha: string, estaActiva: boolean, restriccionAlfabeticaActiva?: boolean }} payload
  * @returns {Promise<Election>}
  */
 export async function createElection(payload) {
@@ -154,7 +161,7 @@ export async function createElection(payload) {
 /**
  * Actualiza una elección.
  * @param {string} electionId
- * @param {{ titulo?: string, gestion?: number, fechaInicio?: string, fechaFin?: string, estaActiva?: boolean }} payload
+ * @param {{ titulo?: string, gestion?: number, fecha?: string, estaActiva?: boolean, restriccionAlfabeticaActiva?: boolean }} payload
  * @returns {Promise<Election>}
  */
 export async function updateElection(electionId, payload) {
@@ -215,4 +222,13 @@ export async function deletePosition(positionId) {
 export async function fetchBallotComplete(electionId) {
   const response = await api.get(`/elecciones/${electionId}/papeleta`)
   return response?.data
+}
+
+/**
+ * Obtiene el total de estudiantes habilitados en el padrón.
+ * @returns {Promise<number>}
+ */
+export async function fetchTotalStudents() {
+  const response = await api.get('/estudiantes/total')
+  return response?.data?.data?.total || 0
 }

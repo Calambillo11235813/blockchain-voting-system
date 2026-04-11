@@ -1,4 +1,10 @@
-import { HttpStatus, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  HttpStatus,
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { LoginDTO } from 'src/auth/dto/login.dto';
@@ -7,6 +13,7 @@ import { EstudiantesService } from 'src/estudiantes/estudiantes.service';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { LoginAdminDto } from 'src/auth/dto/login-admin.dto';
 import { AdminsService } from 'src/admins/admins.service';
+import { EleccionesService } from 'src/elecciones/services/elecciones.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -14,6 +21,7 @@ export class AuthService {
   constructor(
     private readonly estudiantesService: EstudiantesService,
     private readonly adminsService: AdminsService,
+    private readonly eleccionesService: EleccionesService,
     private readonly jwtService: JwtService,
 
   ) { }
@@ -41,6 +49,10 @@ export class AuthService {
         throw new UnauthorizedException('Credenciales inválidas');
       }
 
+      // NOTA: La validación de horario y restricción alfabética (HU-004) 
+      // fue migrada al middleware ElectionGuard y a EleccionesService.validarAccesoVotante
+      // para cumplir con las nuevas reglas. 
+
       const payload: JwtPayload = {
         sub: estudiante.id,
         registro: estudiante.registro,
@@ -58,6 +70,9 @@ export class AuthService {
       };
     } catch (error) {
       if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      if (error instanceof ForbiddenException) {
         throw error;
       }
       throw new InternalServerErrorException(`Error del servidor: ${JSON.stringify(error)}`);
@@ -125,5 +140,20 @@ export class AuthService {
       .toUpperCase();
 
     return `${initials}${String(ci || '').trim()}`;
+  }
+
+  private formatearHoraHHMM(date: Date): string {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+
+  private mensajeNoEsSuTurno(horaInicio: string, horaFin: string): string {
+    return (
+      '¡Hola! 👋 Aún no es tu turno de votación.\n\n' +
+      'Para asegurar que el sistema funcione de forma rápida y sin demoras para todos, hemos organizado el ingreso por orden alfabético. ' +
+      `Según la inicial de tu apellido, tu horario asignado es de ${horaInicio} a ${horaFin}.\n\n` +
+      '¡Te esperamos a esa hora para registrar tu voto de forma segura! 🗳️'
+    );
   }
 }

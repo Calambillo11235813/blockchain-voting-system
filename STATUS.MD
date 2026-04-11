@@ -26,6 +26,5 @@
 
 ## 🚀 Próximos Pasos (Pendientes)
 1.  **HU-003:** Registro de frentes y candidatos (Módulo `elecciones`).
-2.  **HU-004 **,Administrador,Iniciar y finalizar el periodo de votación.,    
-                Controlar los tiempos de apertura y cierre de urnas.,Alta,3
+2.  **HU-004 **,Gestión de cronograma y segmentación de votantes por rangos alfabéticos
 3.  **HU-005:** Integración de validación biométrica.

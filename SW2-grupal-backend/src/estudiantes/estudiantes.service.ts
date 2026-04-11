@@ -63,6 +63,14 @@ export class EstudiantesService {
   }
 
   /**
+   * Obtiene el número total de estudiantes registrados en el padrón.
+   * @returns Promesa con el total de estudiantes.
+   */
+  async obtenerTotalEstudiantes(): Promise<number> {
+    return this.estudianteRepository.count();
+  }
+
+  /**
    * Carga el padron de estudiantes desde un archivo Excel en memoria.
    * @param buffer Buffer del archivo .xlsx.
    * @returns Resultado de la carga con conteos y errores.

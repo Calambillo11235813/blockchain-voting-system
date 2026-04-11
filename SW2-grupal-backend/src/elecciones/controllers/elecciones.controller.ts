@@ -69,6 +69,18 @@ export class EleccionesController {
   }
 
   /**
+   * Activa o desactiva la restricción alfabética (interruptor maestro).
+   * @param eleccionId Identificador UUID de la eleccion.
+   * @returns Eleccion actualizada.
+   */
+  @Patch(':eleccionId/toggle-restriccion')
+  async toggleRestriccion(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<Eleccion>> {
+    return this.eleccionesService.toggleRestriccionAlfabetica(eleccionId);
+  }
+
+  /**
    * Elimina una eleccion por ID.
    * @param eleccionId Identificador UUID de la eleccion.
    * @returns Resultado de eliminacion.

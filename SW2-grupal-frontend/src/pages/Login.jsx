@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loginAdmin, loginStudent } from '../services/authService'
 import { useAuth } from '../context/AuthContext'
 import { getRoleFromToken } from '../utils/jwt'
+import { getTimeToSlot, formatCountdown } from '../utils/electionUtils'
 
 /**
  * Página de inicio de sesión para estudiante (HU-002).
@@ -15,14 +16,35 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [lockoutData, setLockoutData] = useState(null)
+  const [timeLeft, setTimeLeft] = useState(0)
+
+  useEffect(() => {
+    if (!lockoutData) return
+
+    const timer = setInterval(() => {
+      const ms = getTimeToSlot(lockoutData.inicio)
+      setTimeLeft(ms)
+      if (ms <= 0) {
+        setLockoutData(null)
+        setErrorMessage('')
+      }
+    }, 1000)
+
+    // Run once immediately
+    setTimeLeft(getTimeToSlot(lockoutData.inicio))
+
+    return () => clearInterval(timer)
+  }, [lockoutData])
 
   const isDisabled = useMemo(() => {
-    return isSubmitting || studentId.trim().length === 0 || password.trim().length === 0
-  }, [isSubmitting, studentId, password])
+    return isSubmitting || studentId.trim().length === 0 || password.trim().length === 0 || lockoutData !== null
+  }, [isSubmitting, studentId, password, lockoutData])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
     setErrorMessage('')
+    setLockoutData(null)
 
     try {
       setIsSubmitting(true)
@@ -45,9 +67,17 @@ export default function Login() {
       const nextPath = role === 'ADMIN' ? '/admin/dashboard' : '/estudiante/biometria'
       navigate(nextPath, { replace: true })
     } catch (error) {
-      // Mensaje amigable: evitamos mostrar JSON/stack traces.
-      const rawMessage = error?.response?.data?.message || error?.message
-      setErrorMessage(getFriendlyLoginError(rawMessage))
+      const respData = error?.response?.data
+      
+      if (respData?.status === 'WRONG_ALPHABETICAL_SLOT') {
+        setLockoutData(respData.assignedSlot)
+        setErrorMessage(respData.message)
+      } else if (respData?.status === 'NOT_STARTED' || respData?.status === 'FINISHED') {
+        setErrorMessage(respData.message)
+      } else {
+        const rawMessage = respData?.message || error?.message
+        setErrorMessage(getFriendlyLoginError(rawMessage))
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -76,8 +106,17 @@ export default function Login() {
             </div>
 
             {errorMessage ? (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              <div className="mb-4 whitespace-pre-line rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
                 {errorMessage}
+              </div>
+            ) : null}
+
+            {lockoutData && timeLeft > 0 ? (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-center">
+                <p className="text-sm font-semibold text-amber-800 mb-2">Tu turno comienza en:</p>
+                <div className="text-2xl font-mono text-amber-900 tracking-wider">
+                  {formatCountdown(timeLeft)}
+                </div>
               </div>
             ) : null}
 
@@ -149,6 +188,11 @@ function getFriendlyLoginError(rawMessage) {
   const trimmed = rawMessage.trim()
   if (!trimmed) {
     return fallback
+  }
+
+  // Mensaje UX específico: permitimos texto largo y con saltos.
+  if (trimmed.includes('Aún no es tu turno de votación.')) {
+    return trimmed
   }
 
   const looksLikeJson = trimmed.includes('{') || trimmed.includes('}') || trimmed.includes('"')

@@ -15,11 +15,11 @@ export class Eleccion {
   @Column('int', { nullable: false })
   gestion: number;
 
-  @Column('timestamp', { nullable: false })
-  fechaInicio: Date;
+  @Column('date', { nullable: false })
+  fecha: Date;
 
-  @Column('timestamp', { nullable: false })
-  fechaFin: Date;
+  @Column('bool', { nullable: false, default: true })
+  restriccionAlfabeticaActiva: boolean;
 
   @Column('bool', { nullable: false, default: false })
   estaActiva: boolean;

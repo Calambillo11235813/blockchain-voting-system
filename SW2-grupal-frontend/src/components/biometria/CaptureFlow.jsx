@@ -77,10 +77,7 @@ export default function CaptureFlow({ onSuccess }) {
     }
 
     try {
-      const processedScreenshot =
-        currentStep.overlay === 'card'
-          ? await cropCardOverlayFromScreenshot(screenshot, webcamRef.current?.video)
-          : screenshot
+      const processedScreenshot = screenshot
 
       const blob = await dataUrlToBlob(processedScreenshot)
       const extension = blob.type === 'image/png' ? 'png' : 'jpg'
@@ -415,11 +412,6 @@ export default function CaptureFlow({ onSuccess }) {
   )
 }
 
-/**
- * Overlay de guía de captura.
- * @param {{ type: 'card' | 'selfie' }} props
- * @returns {import('react').JSX.Element}
- */
 function CaptureOverlay({ type }) {
   if (type === 'selfie') {
     return (
@@ -429,11 +421,8 @@ function CaptureOverlay({ type }) {
     )
   }
 
-  return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <div className="relative h-[210px] w-[320px] rounded-xl border-4 border-yellow-500/90" />
-    </div>
-  )
+  // Se eliminó el recuadro amarillo para el carnet, permitiendo capturar toda la pantalla
+  return null
 }
 
 /**
@@ -444,79 +433,7 @@ function CaptureOverlay({ type }) {
 async function dataUrlToBlob(dataUrl) {
   const response = await fetch(dataUrl)
   return response.blob()
-}
 
-/**
- * Recorta la zona del recuadro de carnet para enviar una imagen más legible al OCR.
- * @param {string} dataUrl Data URL original capturado por webcam.
- * @param {HTMLVideoElement | null | undefined} videoElement Elemento de video de la webcam.
- * @returns {Promise<string>} Data URL recortado para OCR.
- */
-async function cropCardOverlayFromScreenshot(dataUrl, videoElement) {
-  const image = await loadImageFromDataUrl(dataUrl)
-
-  const displayWidth = Math.max(1, Number(videoElement?.clientWidth) || image.width)
-  const displayHeight = Math.max(1, Number(videoElement?.clientHeight) || image.height)
-
-  const overlayWidthPx = 320
-  const overlayHeightPx = 210
-  const horizontalPadding = Math.round(overlayWidthPx * 0.06)
-  const verticalPadding = Math.round(overlayHeightPx * 0.08)
-
-  const leftDisplay = Math.max(0, (displayWidth - overlayWidthPx) / 2 - horizontalPadding)
-  const topDisplay = Math.max(0, (displayHeight - overlayHeightPx) / 2 - verticalPadding)
-  const widthDisplay = Math.min(displayWidth - leftDisplay, overlayWidthPx + horizontalPadding * 2)
-  const heightDisplay = Math.min(displayHeight - topDisplay, overlayHeightPx + verticalPadding * 2)
-
-  const scaleX = image.width / displayWidth
-  const scaleY = image.height / displayHeight
-
-  const sourceX = Math.max(0, Math.round(leftDisplay * scaleX))
-  const sourceY = Math.max(0, Math.round(topDisplay * scaleY))
-  const sourceWidth = Math.max(1, Math.round(widthDisplay * scaleX))
-  const sourceHeight = Math.max(1, Math.round(heightDisplay * scaleY))
-
-  const outputWidth = sourceWidth
-  const outputHeight = sourceHeight
-
-  const canvas = document.createElement('canvas')
-  canvas.width = outputWidth
-  canvas.height = outputHeight
-
-  const ctx = canvas.getContext('2d')
-  if (!ctx) {
-    return dataUrl
-  }
-
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(
-    image,
-    sourceX,
-    sourceY,
-    sourceWidth,
-    sourceHeight,
-    0,
-    0,
-    outputWidth,
-    outputHeight,
-  )
-
-  return canvas.toDataURL('image/png')
-}
-
-/**
- * Carga una imagen desde data URL.
- * @param {string} dataUrl Data URL de imagen.
- * @returns {Promise<HTMLImageElement>} Imagen cargada.
- */
-function loadImageFromDataUrl(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('No se pudo cargar la captura para recorte.'))
-    image.src = dataUrl
-  })
 }
 
 /**

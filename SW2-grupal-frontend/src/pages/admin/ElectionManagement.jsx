@@ -34,9 +34,9 @@ export default function ElectionManagement() {
   const [electionForm, setElectionForm] = useState(() => ({
     title: '',
     year: '',
-    startDateTimeLocal: '',
-    endDateTimeLocal: '',
+    dateLocal: '',
     isActive: true,
+    isSurnameRestrictionActive: true,
   }))
 
   const [positionForm, setPositionForm] = useState(() => ({
@@ -102,9 +102,9 @@ export default function ElectionManagement() {
     setElectionForm({
       title: '',
       year: '',
-      startDateTimeLocal: '',
-      endDateTimeLocal: '',
+      dateLocal: '',
       isActive: true,
+      isSurnameRestrictionActive: true,
     })
   }
 
@@ -138,15 +138,9 @@ export default function ElectionManagement() {
     const payload = {
       titulo: electionForm.title.trim(),
       gestion: Number(electionForm.year),
-      fechaInicio: toIsoFromDateTimeLocal(electionForm.startDateTimeLocal),
-      fechaFin: toIsoFromDateTimeLocal(electionForm.endDateTimeLocal),
+      fecha: electionForm.dateLocal,
       estaActiva: Boolean(electionForm.isActive),
-    }
-
-    const dateValidationError = validateElectionDates(payload.fechaInicio, payload.fechaFin)
-    if (dateValidationError) {
-      setErrorMessage(dateValidationError)
-      return
+      restriccionAlfabeticaActiva: Boolean(electionForm.isSurnameRestrictionActive),
     }
 
     try {
@@ -175,10 +169,35 @@ export default function ElectionManagement() {
     setElectionForm({
       title: election.titulo || '',
       year: String(election.gestion ?? ''),
-      startDateTimeLocal: toDateTimeLocal(election.fechaInicio),
-      endDateTimeLocal: toDateTimeLocal(election.fechaFin),
+      dateLocal: toDateInputValue(election.fecha),
       isActive: Boolean(election.estaActiva),
+      isSurnameRestrictionActive: Boolean(election.restriccionAlfabeticaActiva ?? true),
     })
+  }
+
+  const handleToggleRestriction = async (electionId, nextValue) => {
+    resetMessages()
+    try {
+      setIsSavingElection(true)
+      await updateElection(electionId, {
+        restriccionAlfabeticaActiva: Boolean(nextValue),
+      })
+
+      // Si se está editando esa misma elección, mantenemos el formulario consistente.
+      if (editingElectionId && editingElectionId === electionId) {
+        setElectionForm((prev) => ({
+          ...prev,
+          isSurnameRestrictionActive: Boolean(nextValue),
+        }))
+      }
+
+      await refreshLists()
+      setSuccessMessage('Actualización exitosa')
+    } catch (error) {
+      setErrorMessage(getFriendlyErrorMessage(error, 'No se pudo actualizar la restricción por apellido.'))
+    } finally {
+      setIsSavingElection(false)
+    }
   }
 
   const handleDeleteElection = async (electionId) => {
@@ -340,28 +359,20 @@ export default function ElectionManagement() {
               />
             </Field>
 
-            <Field label="Fecha y hora de inicio">
+            <Field label="Fecha de elección">
               <input
-                type="datetime-local"
-                value={electionForm.startDateTimeLocal}
-                onChange={(e) =>
-                  setElectionForm((prev) => ({ ...prev, startDateTimeLocal: e.target.value }))
-                }
+                type="date"
+                value={electionForm.dateLocal}
+                onChange={(e) => setElectionForm((prev) => ({ ...prev, dateLocal: e.target.value }))}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 disabled={isBusy}
               />
             </Field>
 
-            <Field label="Fecha y hora de fin">
-              <input
-                type="datetime-local"
-                value={electionForm.endDateTimeLocal}
-                onChange={(e) =>
-                  setElectionForm((prev) => ({ ...prev, endDateTimeLocal: e.target.value }))
-                }
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                disabled={isBusy}
-              />
+            <Field label="Horario de votación">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                08:00 a 16:00
+              </div>
             </Field>
 
             <div className="sm:col-span-2">
@@ -376,6 +387,33 @@ export default function ElectionManagement() {
                 <span className="text-sm font-semibold text-slate-900">Elección activa</span>
               </label>
             </div>
+
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={Boolean(electionForm.isSurnameRestrictionActive)}
+                  onChange={(e) => {
+                    const nextValue = e.target.checked
+                    setElectionForm((prev) => ({ ...prev, isSurnameRestrictionActive: nextValue }))
+
+                    // Guardado inmediato solo en modo edición.
+                    if (editingElectionId) {
+                      handleToggleRestriction(editingElectionId, nextValue)
+                    }
+                  }}
+                  disabled={isBusy}
+                  className="h-4 w-4 rounded border-slate-300"
+                />
+                <span className="text-sm font-semibold text-slate-900">Restricción por apellido activa</span>
+                <span
+                  title="Si se desactiva, los estudiantes podrán votar en cualquier horario sin importar su apellido."
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-xs font-semibold text-slate-700"
+                >
+                  ?
+                </span>
+              </label>
+            </div>
           </div>
 
           <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
@@ -384,8 +422,9 @@ export default function ElectionManagement() {
                 <tr>
                   <Th>Título</Th>
                   <Th>Gestión</Th>
-                  <Th>Inicio</Th>
-                  <Th>Fin</Th>
+                  <Th>Fecha</Th>
+                  <Th>Horario</Th>
+                  <Th>Flujo</Th>
                   <Th>Estado</Th>
                   <Th>Acciones</Th>
                 </tr>
@@ -393,13 +432,13 @@ export default function ElectionManagement() {
               <tbody className="divide-y divide-slate-200 bg-white">
                 {isLoading ? (
                   <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={6}>
+                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={7}>
                       Cargando elecciones…
                     </td>
                   </tr>
                 ) : elections.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={6}>
+                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={7}>
                       No hay elecciones registradas.
                     </td>
                   </tr>
@@ -408,8 +447,30 @@ export default function ElectionManagement() {
                     <tr key={election.id}>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900">{election.titulo}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{election.gestion}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{formatDateTime(election.fechaInicio)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{formatDateTime(election.fechaFin)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{formatElectionDate(election.fecha)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">08:00 a 16:00</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleRestriction(
+                              election.id,
+                              !(election.restriccionAlfabeticaActiva ?? true),
+                            )
+                          }
+                          disabled={isBusy}
+                          className={
+                            (election.restriccionAlfabeticaActiva ?? true)
+                              ? 'inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900 hover:bg-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600'
+                              : 'inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600'
+                          }
+                          title="Cambiar flujo de acceso por apellido"
+                        >
+                          {(election.restriccionAlfabeticaActiva ?? true)
+                            ? 'Controlado (A-Z)'
+                            : 'Libre'}
+                        </button>
+                      </td>
                       <td className="px-4 py-3 text-sm text-slate-700">
                         {election.estaActiva ? 'Activa' : 'Inactiva'}
                       </td>
@@ -614,7 +675,7 @@ function Th({ children }) {
 
 /**
  * Valida formulario de elección.
- * @param {{ title: string, year: string, startDateTimeLocal: string, endDateTimeLocal: string }} form
+ * @param {{ title: string, year: string, dateLocal: string }} form
  * @returns {string}
  */
 function validateElectionForm(form) {
@@ -622,26 +683,7 @@ function validateElectionForm(form) {
   if (!form.year?.trim()) return 'Ingrese la gestión.'
   if (!/^\d{4}$/.test(form.year.trim())) return 'La gestión debe ser un año válido (4 dígitos).'
   if (Number(form.year) < 2000) return 'La gestión debe ser mayor o igual a 2000.'
-  if (!form.startDateTimeLocal) return 'Seleccione la fecha y hora de inicio.'
-  if (!form.endDateTimeLocal) return 'Seleccione la fecha y hora de fin.'
-  return ''
-}
-
-/**
- * Valida el orden de fechas de una elección.
- * @param {string} startIso
- * @param {string} endIso
- * @returns {string}
- */
-function validateElectionDates(startIso, endIso) {
-  const start = new Date(startIso)
-  const end = new Date(endIso)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return 'Las fechas seleccionadas no son válidas.'
-  }
-  if (end.getTime() <= start.getTime()) {
-    return 'La fecha de fin debe ser posterior a la fecha de inicio.'
-  }
+  if (!form.dateLocal) return 'Seleccione la fecha de elección.'
   return ''
 }
 
@@ -657,53 +699,46 @@ function validatePositionForm(form) {
   return ''
 }
 
-/**
- * Convierte un `datetime-local` a ISO.
- *
- * Nota: El navegador entrega fecha/hora local; se normaliza a ISO para el backend.
- *
- * @param {string} dateTimeLocal
- * @returns {string}
- */
-function toIsoFromDateTimeLocal(dateTimeLocal) {
-  const date = new Date(dateTimeLocal)
-  return date.toISOString()
-}
 
 /**
- * Convierte una fecha ISO a `datetime-local`.
- * @param {string} iso
+ * Normaliza una fecha ISO o `YYYY-MM-DD` a valor compatible con `<input type="date" />`.
+ * @param {string} value
  * @returns {string}
  */
-function toDateTimeLocal(iso) {
-  if (!iso) return ''
-  const date = new Date(iso)
+function toDateInputValue(value) {
+  if (!value) return ''
+
+  // Importante: el backend puede devolver `date` como ISO con hora (ej. 2026-04-10T00:00:00.000Z).
+  // Si usamos new Date() en zona horaria -04, puede mostrarse como un día menos.
+  const match = String(value).match(/^(\d{4}-\d{2}-\d{2})/)
+  if (match?.[1]) return match[1]
+
+  const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-
-  const pad = (value) => String(value).padStart(2, '0')
-  const yyyy = date.getFullYear()
-  const mm = pad(date.getMonth() + 1)
-  const dd = pad(date.getDate())
-  const hh = pad(date.getHours())
-  const min = pad(date.getMinutes())
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+  const pad = (v) => String(v).padStart(2, '0')
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`
 }
 
 /**
- * Formatea ISO para mostrar en tabla.
- * @param {string} iso
+ * Formatea la fecha de elección para tabla.
+ * @param {string} value
  * @returns {string}
  */
-function formatDateTime(iso) {
-  if (!iso) return '—'
-  const date = new Date(iso)
+function formatElectionDate(value) {
+  if (!value) return '—'
+
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    const [, yyyy, mm, dd] = match
+    return `${dd}/${mm}/${yyyy}`
+  }
+
+  const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('es-BO', {
+  return date.toLocaleDateString('es-BO', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
   })
 }
 

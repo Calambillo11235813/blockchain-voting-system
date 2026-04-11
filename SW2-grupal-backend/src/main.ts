@@ -1,3 +1,9 @@
+// --- POLIFILL PARA TENSORFLOW & FACE-API EN NODE.JS ---
+// FaceAPI (por debajo usa tfjs-core) hace crash si no encuentra TextEncoder globalmente evaluado al momento de su importación.
+import { TextEncoder, TextDecoder } from 'util';
+Object.assign(globalThis, { TextEncoder, TextDecoder });
+// --------------------------------------------------------
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';

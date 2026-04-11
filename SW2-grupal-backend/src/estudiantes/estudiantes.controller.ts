@@ -1,12 +1,23 @@
-import { BadRequestException, Controller, HttpCode, HttpStatus, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Controller, HttpCode, HttpStatus, Post, Get, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { EstudiantesService } from './estudiantes.service';
-import { ApiResponse } from 'src/compartido/respuesta';
+import { ApiResponse, createApiResponse } from 'src/compartido/respuesta';
 
 @Controller('estudiantes')
 export class EstudiantesController {
   constructor(private readonly estudiantesService: EstudiantesService) { }
+
+  /**
+   * Retorna la cantidad total de estudiantes registrados en el padrón.
+   * @returns Total de estudiantes.
+   */
+  @Get('total')
+  @HttpCode(HttpStatus.OK)
+  async obtenerTotalEstudiantes(): Promise<ApiResponse<{ total: number }>> {
+    const total = await this.estudiantesService.obtenerTotalEstudiantes();
+    return createApiResponse(HttpStatus.OK, { total }, 'Total de estudiantes obtenido.');
+  }
 
   /**
    * Carga el padron de estudiantes desde un archivo Excel (.xlsx).

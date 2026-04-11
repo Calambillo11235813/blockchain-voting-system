@@ -28,7 +28,8 @@ export class BiometriaService {
   private readonly debugBiometria =
     String(process.env.BIOMETRIA_DEBUG || '').toLowerCase() === 'true' ||
     process.env.NODE_ENV !== 'production';
-  private readonly ocrProvider = String(process.env.BIOMETRIA_OCR_PROVIDER || 'local_then_gemini').toLowerCase();
+  // Modos soportados: 'local' | 'gemini' | 'local_then_gemini' | 'gemini_then_local'
+  private readonly ocrProvider = String(process.env.BIOMETRIA_OCR_PROVIDER || 'gemini_then_local').toLowerCase();
   private readonly geminiApiKey = String(process.env.GEMINI_API_KEY || '');
   private readonly geminiModel = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash');
   private readonly geminiBaseUrl = String(process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta');
@@ -36,6 +37,10 @@ export class BiometriaService {
   private readonly permitirBypassFaceMatchPorRuntime =
     String(process.env.BIOMETRIA_FACE_MATCH_ALLOW_RUNTIME_BYPASS || '').toLowerCase() === 'true' ||
     process.env.NODE_ENV !== 'production';
+
+  // Interruptor maestro solicitado por el usuario para deshabilitar temporalmente la biometría
+  private readonly bypassBiometriaMaestro =
+    String(process.env.BYPASS_BIOMETRIA_FACE_MATCH || '').toLowerCase() === 'true';
 
   constructor(
     private readonly estudiantesService: EstudiantesService,
@@ -111,9 +116,13 @@ export class BiometriaService {
         throw new BadRequestException('Los datos del carnet no coinciden con el padron.');
       }
 
-      const verificacionFacialExitosa = await this.verificarRostro(archivos.frontal.path, archivos.selfie.path);
-      if (!verificacionFacialExitosa) {
-        throw new BadRequestException('La verificacion facial no coincide.');
+      if (this.bypassBiometriaMaestro) {
+        this.logDebug(traceId, 'Bypass Maestro de verificacion facial activado. Saltando comparacion 1:1.');
+      } else {
+        const verificacionFacialExitosa = await this.verificarRostro(archivos.frontal.path, archivos.selfie.path);
+        if (!verificacionFacialExitosa) {
+          throw new BadRequestException('La verificacion facial no coincide.');
+        }
       }
 
       return {
@@ -141,39 +150,85 @@ export class BiometriaService {
     traceId: string,
   ): Promise<ResultadoOcrCarnet> {
     const rutaImagen = _archivos.frontal.path;
-
-    const debeUsarLocal = this.ocrProvider !== 'gemini';
-    const debeUsarGemini = this.ocrProvider === 'gemini' || this.ocrProvider === 'local_then_gemini';
-
-    let datosLocal: ResultadoOcrCarnet = { ci: '', nombres: '', apellidos: '', candidatosCi: [] };
     let textoExtraido = '';
-    if (debeUsarLocal) {
+    let datos: ResultadoOcrCarnet = { ci: '', nombres: '', apellidos: '', candidatosCi: [] };
+
+    // ── MODO: gemini_then_local ──────────────────────────────────────────────
+    // Gemini primero (rápido ~2s). Si falla o devuelve datos incompletos,
+    // se activa Tesseract como respaldo offline.
+    if (this.ocrProvider === 'gemini_then_local') {
+      this.logDebug(traceId, 'OCR: intentando Gemini primero (gemini_then_local)');
+      const datosGemini = await this.extraerDatosConGemini(rutaImagen, traceId);
+      const geminiCompleto = Boolean(datosGemini?.ci && datosGemini?.nombres && datosGemini?.apellidos);
+
+      if (geminiCompleto && datosGemini) {
+        this.logDebug(traceId, 'OCR: Gemini retorno datos completos. Tesseract omitido.');
+        return datosGemini;
+      }
+
+      // Gemini incompleto o fallo → activar Tesseract como respaldo
+      this.logDebug(traceId, 'OCR: Gemini incompleto o fallo. Activando Tesseract como respaldo.');
       textoExtraido = await this.ejecutarOcrSobreImagen(rutaImagen, traceId);
-      this.logDebug(traceId, 'Texto OCR (resumen)', {
+      this.logDebug(traceId, 'Texto OCR Tesseract (resumen)', {
         totalCaracteres: textoExtraido.length,
         muestra: textoExtraido.replace(/\s+/g, ' ').trim().slice(0, 280),
       });
-      datosLocal = this.extraerDatosDesdeTextoOcr(textoExtraido);
+      const datosLocal = this.extraerDatosDesdeTextoOcr(textoExtraido);
+
+      // Fusionar lo que Gemini pudo extraer con lo de Tesseract
+      datos = {
+        ci: datosGemini?.ci || datosLocal.ci,
+        nombres: datosGemini?.nombres || datosLocal.nombres,
+        apellidos: datosGemini?.apellidos || datosLocal.apellidos,
+        candidatosCi: this.normalizarCandidatosCi([
+          ...(datosGemini?.candidatosCi || []),
+          ...(datosLocal.candidatosCi || []),
+        ]),
+      };
     }
 
-    const localCompleto = Boolean(datosLocal.ci && datosLocal.nombres && datosLocal.apellidos);
-    let datos = datosLocal;
-
-    if (debeUsarGemini && (!localCompleto || this.ocrProvider === 'gemini')) {
+    // ── MODO: gemini (solo Gemini, sin fallback) ─────────────────────────────
+    else if (this.ocrProvider === 'gemini') {
+      this.logDebug(traceId, 'OCR: solo Gemini');
       const datosGemini = await this.extraerDatosConGemini(rutaImagen, traceId);
       if (datosGemini) {
-        datos = {
-          ci: datosLocal.ci || datosGemini.ci,
-          nombres: datosLocal.nombres || datosGemini.nombres,
-          apellidos: datosLocal.apellidos || datosGemini.apellidos,
-          candidatosCi: this.normalizarCandidatosCi([
-            ...(datosLocal.candidatosCi || []),
-            ...(datosGemini.candidatosCi || []),
-            datosLocal.ci,
-            datosGemini.ci,
-          ]),
-        };
+        datos = datosGemini;
       }
+    }
+
+    // ── MODO: local_then_gemini (Tesseract primero, Gemini de respaldo) ──────
+    else if (this.ocrProvider === 'local_then_gemini') {
+      this.logDebug(traceId, 'OCR: Tesseract primero, Gemini de respaldo');
+      textoExtraido = await this.ejecutarOcrSobreImagen(rutaImagen, traceId);
+      const datosLocal = this.extraerDatosDesdeTextoOcr(textoExtraido);
+      const localCompleto = Boolean(datosLocal.ci && datosLocal.nombres && datosLocal.apellidos);
+
+      if (!localCompleto) {
+        const datosGemini = await this.extraerDatosConGemini(rutaImagen, traceId);
+        if (datosGemini) {
+          datos = {
+            ci: datosLocal.ci || datosGemini.ci,
+            nombres: datosLocal.nombres || datosGemini.nombres,
+            apellidos: datosLocal.apellidos || datosGemini.apellidos,
+            candidatosCi: this.normalizarCandidatosCi([
+              ...(datosLocal.candidatosCi || []),
+              ...(datosGemini.candidatosCi || []),
+            ]),
+          };
+        } else {
+          datos = datosLocal;
+        }
+      } else {
+        datos = datosLocal;
+      }
+    }
+
+    // ── MODO: local (solo Tesseract, sin Gemini) ─────────────────────────────
+    else {
+      this.logDebug(traceId, 'OCR: solo Tesseract (local)');
+      textoExtraido = await this.ejecutarOcrSobreImagen(rutaImagen, traceId);
+      const datosLocal = this.extraerDatosDesdeTextoOcr(textoExtraido);
+      datos = datosLocal;
     }
 
     if (!datos.candidatosCi || datos.candidatosCi.length === 0) {
@@ -434,9 +489,24 @@ export class BiometriaService {
         },
       };
 
-      const response = await axios.post(endpoint, payload, {
-        timeout: this.geminiTimeoutMs,
-      });
+      let response;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          response = await axios.post(endpoint, payload, {
+            timeout: this.geminiTimeoutMs,
+          });
+          break;
+        } catch (e: any) {
+          if (attempt === 3) throw e;
+          const status = e.response?.status;
+          if (status === 503 || status === 500 || status === 429) {
+            this.logDebug(traceId, `Gemini fallo con ${status}. Reintento ${attempt} de 3 en 1.5s...`);
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            continue;
+          }
+          throw e;
+        }
+      }
 
       const textoRespuesta = this.extraerTextoDeRespuestaGemini(response.data);
       if (!textoRespuesta) {
@@ -868,7 +938,13 @@ export class BiometriaService {
       }
 
       const distancia = this.distanciaEuclidiana(descriptorCarnet, descriptorSelfie);
-      return distancia < 0.6;
+      const esMatch = distancia < 0.6;
+      
+      this.logger.log(
+        `[Verificacion Facial 1:1] Distancia calculada: ${distancia.toFixed(4)} (Umbral: <0.6) | Match Exitoso: ${esMatch}`
+      );
+      
+      return esMatch;
     } catch (error: unknown) {
       const mensaje = error instanceof Error ? error.message : String(error);
       const runtimeTextEncoderIncompatible = /TextEncoder is not a constructor/i.test(mensaje);
@@ -896,53 +972,18 @@ export class BiometriaService {
    * @returns Modulo ESM de `@vladmandic/face-api`.
    */
   private async obtenerFaceApi(): Promise<any> {
-    this.ensureNodeTextEncodingApis();
-
     if (!this.faceApiEsmPromise) {
-      this.faceApiEsmPromise = (new Function(
-        'return import("@vladmandic/face-api/dist/face-api.esm.js")'
-      )() as Promise<any>);
+      // Usar la version WASM de Node para evitar bugs del entorno ESM en Windows
+      const faceapi = require('@vladmandic/face-api/dist/face-api.node-wasm.js');
+      
+      // Es obligatorio esperar que WASM cargue antes de decodificar Modelos
+      this.faceApiEsmPromise = faceapi.tf.ready().then(() => faceapi);
     }
 
-    const faceapi = await this.faceApiEsmPromise;
-    this.patchFaceApiTextEncodingApis(faceapi);
-    return faceapi;
+    return await this.faceApiEsmPromise;
   }
 
-  private ensureNodeTextEncodingApis(): void {
-    const globalAny = globalThis as unknown as {
-      TextEncoder?: typeof TextEncoder;
-      TextDecoder?: typeof TextDecoder;
-      util?: Record<string, unknown>;
-    };
 
-    if (typeof globalAny.TextEncoder !== 'function') {
-      globalAny.TextEncoder = TextEncoder;
-    }
-
-    if (typeof globalAny.TextDecoder !== 'function') {
-      globalAny.TextDecoder = TextDecoder;
-    }
-
-    const utilObj = (globalAny.util || {}) as Record<string, unknown>;
-    if (typeof utilObj.TextEncoder !== 'function') {
-      utilObj.TextEncoder = TextEncoder;
-    }
-    if (typeof utilObj.TextDecoder !== 'function') {
-      utilObj.TextDecoder = TextDecoder;
-    }
-    globalAny.util = utilObj;
-  }
-
-  private patchFaceApiTextEncodingApis(faceapi: any): void {
-    const tfUtil = faceapi?.tf?.util as Record<string, unknown> | undefined;
-    if (!tfUtil) {
-      return;
-    }
-
-    tfUtil.TextEncoder = TextEncoder;
-    tfUtil.TextDecoder = TextDecoder;
-  }
 
   /**
    * Carga los modelos faciales desde la carpeta `/models`.
@@ -1013,7 +1054,8 @@ export class BiometriaService {
 
     const { data, info } = await sharp(rutaImagen)
       .rotate()
-      .toColourspace('rgb')
+      .flatten({ background: { r: 255, g: 255, b: 255 } })  // Elimina canal Alpha fusionando sobre fondo blanco
+      .toColorspace('srgb')                                   // Espacio de color soportado por libvips/Sharp
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });

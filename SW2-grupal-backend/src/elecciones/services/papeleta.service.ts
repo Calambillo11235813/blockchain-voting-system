@@ -41,8 +41,7 @@ export interface PapeletaCompleta {
   id: string;
   titulo: string;
   gestion: number;
-  fechaInicio: Date;
-  fechaFin: Date;
+  fecha: Date;
   estaActiva: boolean;
   cargos: CargoPapeleta[];
 }
@@ -93,8 +92,7 @@ export class PapeletaService {
       id: eleccion.id,
       titulo: eleccion.titulo,
       gestion: eleccion.gestion,
-      fechaInicio: eleccion.fechaInicio,
-      fechaFin: eleccion.fechaFin,
+      fecha: eleccion.fecha,
       estaActiva: eleccion.estaActiva,
       cargos: eleccion.cargos.map((cargo) => ({
         id: cargo.id,
