@@ -2,8 +2,8 @@ import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { handleError } from 'src/compartido/manejo-errores';
 import { Repository } from 'typeorm';
-import { Role } from 'src/auth/entities/role.entity';
-import { Permission } from 'src/auth/entities/permission.entity';
+import { Role } from 'src/autenticacion/entities/role.entity';
+import { Permission } from 'src/autenticacion/entities/permission.entity';
 import { permissionSeedData, roleSeedData } from '../data/role-permission.data';
 import { ApiResponse } from 'src/compartido/respuesta';
 

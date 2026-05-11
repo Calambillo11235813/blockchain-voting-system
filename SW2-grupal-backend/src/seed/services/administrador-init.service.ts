@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { AdminsService } from 'src/admins/admins.service';
+import { AdminsService } from 'src/administradores/admins.service';
 
 @Injectable()
 export class AdministradorInitService implements OnApplicationBootstrap {

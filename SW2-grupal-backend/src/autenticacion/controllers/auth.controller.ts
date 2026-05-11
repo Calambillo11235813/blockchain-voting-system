@@ -1,9 +1,9 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { AuthService } from 'src/auth/services/auth.service';
-import { LoginDTO } from 'src/auth/dto/login.dto';
-import { LoginAdminDto } from 'src/auth/dto/login-admin.dto';
+import { AuthService } from 'src/autenticacion/services/auth.service';
+import { LoginDTO } from 'src/autenticacion/dto/login.dto';
+import { LoginAdminDto } from 'src/autenticacion/dto/login-admin.dto';
 import { ApiResponse } from 'src/compartido/respuesta';
-import { AuthResponse } from 'src/auth/interfaces/auth.interface';
+import { AuthResponse } from 'src/autenticacion/interfaces/auth.interface';
 import { ElectionGuard } from '../guards/election.guard';
 
 @Controller('auth')

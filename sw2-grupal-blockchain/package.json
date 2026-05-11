@@ -6,20 +6,14 @@
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy": "hardhat run scripts/Deploy.ts",
-    "console": "hardhat console --network localhost",
-    "zksync-sepolia-console": "hardhat console --network zkSyncSepolia",
+    "console": "hardhat console",
     "local-node": "hardhat node",
-    "clean-artifacts": "hardhat clean",
-    "server": "node ./server/index.js"
+    "clean-artifacts": "hardhat clean"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@matterlabs/hardhat-zksync-deploy": "^1.6.0",
-    "@matterlabs/hardhat-zksync-solc": "^1.2.5",
-    "@nomicfoundation/hardhat-ethers": "^3.0.8",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@typechain/ethers-v6": "^0.5.1",
     "@types/chai": "^4.3.20",
@@ -35,12 +29,7 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@types/uuid": "^10.0.0",
-    "body-parser": "^1.20.3",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.1",
-    "uuid": "^10.0.0",
-    "zksync-ethers": "^6.14.0"
+    "dotenv": "^16.4.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

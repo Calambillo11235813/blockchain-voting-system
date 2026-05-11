@@ -5,7 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 
-import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
+import { JwtPayload } from 'src/autenticacion/interfaces/jwt-payload.interface';
 import { Estudiante } from 'src/estudiantes/entities/estudiante.entity';
 
 @Injectable()

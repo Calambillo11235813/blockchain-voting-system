@@ -1,5 +1,5 @@
 import * as jwt from 'jsonwebtoken';
-import { AuthTokenResult, IUseToken } from 'src/auth/interfaces/auth.interface';
+import { AuthTokenResult, IUseToken } from 'src/autenticacion/interfaces/auth.interface';
 import { handleError } from 'src/compartido/manejo-errores';
 
 export const useTokenSaas = (token: string): IUseToken | string => {

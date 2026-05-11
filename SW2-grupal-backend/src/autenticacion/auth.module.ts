@@ -12,7 +12,7 @@ import { AuthSaasGuard } from './guards/auth-saas.guard';
 import { UserModule } from 'src/estudiantes/usuarios/user.module';
 import { EstudiantesModule } from 'src/estudiantes/estudiantes.module';
 import { Estudiante } from 'src/estudiantes/entities/estudiante.entity';
-import { AdminsModule } from 'src/admins/admins.module';
+import { AdminsModule } from 'src/administradores/admins.module';
 import { EleccionesModule } from 'src/elecciones/elecciones.module';
 
 @Module({

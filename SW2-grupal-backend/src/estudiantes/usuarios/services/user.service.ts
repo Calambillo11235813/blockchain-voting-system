@@ -5,8 +5,8 @@ import { Repository, FindOptionsWhere, FindOptionsSelect, FindOptionsOrder } fro
 import { CreateUserDTO } from '../dto/create-user.dto';
 import { handleError } from 'src/compartido/manejo-errores';
 import { IOptionUser } from '../interface/option-user.interface';
-import { User } from 'src/auth/entities/user.entity';
-import { Role } from 'src/auth/entities/role.entity';
+import { User } from 'src/autenticacion/entities/user.entity';
+import { Role } from 'src/autenticacion/entities/role.entity';
 import { GenderEnum } from '../enums/gender.enum';
 import { hashSync } from 'bcryptjs';
 import { ApiResponse } from 'src/compartido/respuesta';

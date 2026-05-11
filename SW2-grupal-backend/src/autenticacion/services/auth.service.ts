@@ -7,12 +7,12 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ApiResponse } from 'src/compartido/respuesta';
-import { LoginDTO } from 'src/auth/dto/login.dto';
-import { AuthResponse } from 'src/auth/interfaces/auth.interface';
+import { LoginDTO } from 'src/autenticacion/dto/login.dto';
+import { AuthResponse } from 'src/autenticacion/interfaces/auth.interface';
 import { EstudiantesService } from 'src/estudiantes/estudiantes.service';
-import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
-import { LoginAdminDto } from 'src/auth/dto/login-admin.dto';
-import { AdminsService } from 'src/admins/admins.service';
+import { JwtPayload } from 'src/autenticacion/interfaces/jwt-payload.interface';
+import { LoginAdminDto } from 'src/autenticacion/dto/login-admin.dto';
+import { AdminsService } from 'src/administradores/admins.service';
 import { EleccionesService } from 'src/elecciones/services/elecciones.service';
 import * as bcrypt from 'bcrypt';
 

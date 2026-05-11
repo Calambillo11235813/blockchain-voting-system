@@ -1,4 +1,4 @@
-import { User } from 'src/auth/entities/user.entity';
+import { User } from 'src/autenticacion/entities/user.entity';
 import { FindOptionsWhere, FindOptionsSelect, FindOptionsOrder, FindOptionsRelations } from "typeorm";
 
 export interface IOptionUser {

@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { UserController } from './controllers/user.controller';
 import { UserService } from './services/user.service';
-import { User } from 'src/auth/entities/user.entity';
+import { User } from 'src/autenticacion/entities/user.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { NestjsFormDataModule } from 'nestjs-form-data';
-import { Role } from 'src/auth/entities/role.entity';
+import { Role } from 'src/autenticacion/entities/role.entity';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 @Module({

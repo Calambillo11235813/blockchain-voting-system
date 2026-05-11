@@ -15,7 +15,6 @@ La API corre con prefijo global: ` /api `.
 - **Base de datos**: PostgreSQL
 - **ORM**: TypeORM (`@nestjs/typeorm`, `typeorm`)
 - **Autenticación**: JWT (`@nestjs/jwt`, `passport`, `passport-jwt`, `jsonwebtoken`)
-- **Pagos**: Stripe (`stripe`)
 - **Blockchain**: Ethers v6 (`ethers`) + ABI empaquetado (ver `src/blockchain/abis/`)
 - **IA (AWS)**:
   - Textract (`@aws-sdk/client-textract`) para OCR/extracción de texto

@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, NotFoundException, Unauthori
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Request } from 'express';
-import { User } from 'src/auth/entities/user.entity';
+import { User } from 'src/autenticacion/entities/user.entity';
 import { Permission } from '../entities/permission.entity';
 import { Repository } from 'typeorm';
 
