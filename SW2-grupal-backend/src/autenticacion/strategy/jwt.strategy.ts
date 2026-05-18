@@ -6,13 +6,13 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 
 import { JwtPayload } from 'src/autenticacion/interfaces/jwt-payload.interface';
-import { Estudiante } from 'src/estudiantes/entities/estudiante.entity';
+import { Elector } from 'src/electores/entities/elector.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    @InjectRepository(Estudiante)
-    private readonly estudianteRepository: Repository<Estudiante>,
+    @InjectRepository(Elector)
+    private readonly electorRepository: Repository<Elector>,
     configService: ConfigService,
   ) {
     super({
@@ -21,19 +21,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<Estudiante> {
-    const estudiante = await this.estudianteRepository.findOne({
+  async validate(payload: JwtPayload): Promise<Elector> {
+    const elector = await this.electorRepository.findOne({
       where: { id: payload.sub },
     });
 
-    if (!estudiante) {
+    if (!elector) {
       throw new UnauthorizedException('token not valid');
     }
 
-    if (!estudiante.estaHabilitado) {
-      throw new UnauthorizedException('estudiante no habilitado');
-    }
-
-    return estudiante;
+    // Nota: La validación de habilitado por comicio (RF1) se hace al hacer login,
+    // pero a nivel de identidad global, el elector existe.
+    // Si hubiese una columna global 'estaHabilitado' en Elector se chequearía aquí.
+    
+    return elector;
   }
 }

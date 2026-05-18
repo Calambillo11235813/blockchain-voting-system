@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, ForbiddenException } from '@nestjs/common';
 import { Request } from 'express';
-import { EleccionesService } from 'src/elecciones/services/elecciones.service';
-import { EstudiantesService } from 'src/estudiantes/estudiantes.service';
+import { EleccionesLegacyService } from 'src/elecciones/services/elecciones.service';
+import { ElectoresService } from 'src/electores/electores.service';
 
 /**
  * Guard que rinde la logica de control de acceso por tiempo y alfabético (HU-004).
@@ -9,22 +9,22 @@ import { EstudiantesService } from 'src/estudiantes/estudiantes.service';
 @Injectable()
 export class ElectionGuard implements CanActivate {
   constructor(
-    private readonly eleccionesService: EleccionesService,
-    private readonly estudiantesService: EstudiantesService,
+    private readonly eleccionesService: EleccionesLegacyService,
+    private readonly electoresService: ElectoresService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     
-    // Aplicamos restricción en login de estudiantes
+    // Aplicamos restricción en login de electores
     if (req.path.includes('/auth/login') && !req.path.includes('login-admin')) {
       const registro = req.body?.registro;
       if (!registro) {
         return true; // Dejamos que el pipe de validación (DTO) o Auth fallen
       }
 
-      const estudiante = await this.estudiantesService.buscarEstudiantePorRegistro(registro);
-      if (!estudiante) {
+      const elector = await this.electoresService.buscarPorRegistro(registro);
+      if (!elector) {
         return true; // Dejamos que el servicio de login retorne credenciales inválidas para no fugar información
       }
 
@@ -36,7 +36,7 @@ export class ElectionGuard implements CanActivate {
         });
       }
 
-      await this.eleccionesService.validarAccesoVotante(estudiante.apellidos, eleccionActiva.id);
+      await this.eleccionesService.validarAccesoVotante(elector.apellido, eleccionActiva.id);
     }
 
     return true;

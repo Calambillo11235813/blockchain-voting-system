@@ -10,7 +10,7 @@ import { ActualizarEleccionDto } from '../dto/eleccion/actualizar-eleccion.dto';
  * Servicio del dominio de elecciones facultativas.
  */
 @Injectable()
-export class EleccionesService {
+export class EleccionesLegacyService {
   private static readonly VOTING_START_HOUR = 8;
   private static readonly VOTING_END_HOUR = 16;
 
@@ -263,8 +263,8 @@ export class EleccionesService {
     const month = base.getMonth();
     const day = base.getDate();
 
-    const inicio = new Date(year, month, day, EleccionesService.VOTING_START_HOUR, 0, 0, 0);
-    const fin = new Date(year, month, day, EleccionesService.VOTING_END_HOUR, 0, 0, 0);
+    const inicio = new Date(year, month, day, EleccionesLegacyService.VOTING_START_HOUR, 0, 0, 0);
+    const fin = new Date(year, month, day, EleccionesLegacyService.VOTING_END_HOUR, 0, 0, 0);
     return { inicio, fin };
   }
 

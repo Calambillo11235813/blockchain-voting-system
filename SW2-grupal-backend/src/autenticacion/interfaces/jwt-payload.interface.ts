@@ -1,4 +1,4 @@
-export type RolUsuario = 'ESTUDIANTE' | 'ADMIN';
+export type RolUsuario = 'ESTUDIANTE' | 'DOCENTE' | 'ADMINISTRATIVO' | 'ADMIN';
 
 export interface JwtPayload {
     sub: string;

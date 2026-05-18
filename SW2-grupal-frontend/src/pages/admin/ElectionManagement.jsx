@@ -612,7 +612,7 @@ export default function ElectionManagement() {
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900">{position.nombre}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">{position.facultad}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">
-                        {position?.eleccion?.id ? electionLabelById.get(position.eleccion.id) || '—' : '—'}
+                        {position?.eleccion ? `${position.eleccion.titulo} (${position.eleccion.gestion})` : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">

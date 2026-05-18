@@ -7,8 +7,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { EleccionesService } from '../services/elecciones.service';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { EleccionesLegacyService } from '../services/elecciones.service';
+import { PadronService } from '../services/padron.service';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { Eleccion } from '../entities/eleccion.entity';
 import { CrearEleccionDto } from '../dto/eleccion/crear-eleccion.dto';
@@ -19,7 +24,10 @@ import { ActualizarEleccionDto } from '../dto/eleccion/actualizar-eleccion.dto';
  */
 @Controller('elecciones')
 export class EleccionesController {
-  constructor(private readonly eleccionesService: EleccionesService) {}
+  constructor(
+    private readonly eleccionesService: EleccionesLegacyService,
+    private readonly padronService: PadronService,
+  ) {}
 
   /**
    * Crea una eleccion facultativa.
@@ -90,5 +98,39 @@ export class EleccionesController {
     @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
   ): Promise<ApiResponse<null>> {
     return this.eleccionesService.eliminarEleccion(eleccionId);
+  }
+
+  /**
+   * Carga masiva del padrón electoral desde un archivo Excel (.xlsx).
+   * @param eleccionId Identificador UUID de la eleccion.
+   * @param file Archivo Excel subido.
+   * @returns Estadísticas de la carga masiva.
+   */
+  @Post(':eleccionId/padron')
+  @UseInterceptors(FileInterceptor('file'))
+  async cargarPadronElectoral(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<ApiResponse<any>> {
+    return this.padronService.cargarPadronElectoral(eleccionId, file.buffer);
+  }
+
+  /**
+   * Lista el padrón electoral de una elección.
+   * @param eleccionId Identificador UUID de la eleccion.
+   * @param page Número de página (1-indexed).
+   * @param limit Registros por página.
+   * @returns Lista paginada del padrón.
+   */
+  @Get(':eleccionId/padron')
+  async listarPadronElectoral(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('estamento') estamento?: string,
+  ): Promise<ApiResponse<any>> {
+    const pageNumber = page ? parseInt(page, 10) : 1;
+    const limitNumber = limit ? parseInt(limit, 10) : 50;
+    return this.padronService.listarPadronElectoral(eleccionId, pageNumber, limitNumber, estamento);
   }
 }

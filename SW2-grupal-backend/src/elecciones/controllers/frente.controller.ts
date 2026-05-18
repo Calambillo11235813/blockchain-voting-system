@@ -13,17 +13,33 @@ export class FrenteController {
   constructor(private readonly frenteService: FrenteService) {}
 
   /**
-   * Crea un frente.
-   * @param crearFrenteDto Datos del frente.
-   * @returns Frente creado.
+   * Registra un frente para competir por un cargo en una elección.
+   * @param eleccionCargoId Identificador UUID de la instancia del cargo en la eleccion.
+   * @param crearFrenteDto Datos del frente (incluyendo candidatos opcionales).
+   * @returns Frente creado con sus candidatos.
    */
-  @Post()
-  async crearFrente(@Body() crearFrenteDto: CrearFrenteDto): Promise<ApiResponse<Frente>> {
-    return this.frenteService.crearFrente(crearFrenteDto);
+  @Post(':eleccionCargoId')
+  async registrarFrente(
+    @Param('eleccionCargoId', ParseUUIDPipe) eleccionCargoId: string,
+    @Body() crearFrenteDto: CrearFrenteDto,
+  ): Promise<ApiResponse<Frente>> {
+    return this.frenteService.registrarFrente(eleccionCargoId, crearFrenteDto);
   }
 
   /**
-   * Lista todos los frentes.
+   * Lista todos los frentes que compiten por un EleccionCargo.
+   * @param eleccionCargoId Identificador UUID de la instancia del cargo en la eleccion.
+   * @returns Lista de frentes.
+   */
+  @Get('eleccion-cargo/:eleccionCargoId/lista')
+  async listarFrentesPorEleccionCargo(
+    @Param('eleccionCargoId', ParseUUIDPipe) eleccionCargoId: string,
+  ): Promise<ApiResponse<Frente[]>> {
+    return this.frenteService.listarFrentesPorEleccionCargo(eleccionCargoId);
+  }
+
+  /**
+   * Lista todos los frentes a nivel global.
    * @returns Lista de frentes.
    */
   @Get('lista')

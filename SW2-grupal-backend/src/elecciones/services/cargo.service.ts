@@ -1,59 +1,112 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ApiResponse, createApiResponse } from 'src/compartido/respuesta';
 import { Cargo } from 'src/elecciones/entities/cargo.entity';
+import { EleccionCargo } from 'src/elecciones/entities/eleccion-cargo.entity';
+import { Eleccion } from 'src/elecciones/entities/eleccion.entity';
 import { CrearCargoDto } from 'src/elecciones/dto/cargo/crear-cargo.dto';
 import { ActualizarCargoDto } from 'src/elecciones/dto/cargo/actualizar-cargo.dto';
-import { Eleccion } from 'src/elecciones/entities/eleccion.entity';
 
 /**
- * Servicio de aplicacion para el dominio de cargos.
+ * Servicio de aplicacion para el dominio de cargos (Catálogo Maestro).
+ *
+ * Responsabilidades:
+ * - CRUD del catálogo global de Cargos.
+ * - Vinculación automática Cargo ↔ Elección (EleccionCargo) cuando se
+ *   proporciona `eleccionId` en la creación o actualización.
  */
 @Injectable()
 export class CargoService {
   constructor(
     @InjectRepository(Cargo)
     private readonly cargoRepository: Repository<Cargo>,
-    @InjectRepository(Eleccion)
-    private readonly eleccionRepository: Repository<Eleccion>,
+
+    @InjectRepository(EleccionCargo)
+    private readonly eleccionCargoRepository: Repository<EleccionCargo>,
+
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
-   * Crea un cargo.
-   * @param crearCargoDto Datos del cargo.
+   * Crea un cargo en el catálogo maestro.
+   * Si se proporciona `eleccionId`, vincula el cargo a esa elección
+   * creando el registro `EleccionCargo` dentro de una transacción atómica.
+   *
+   * @param crearCargoDto Datos del cargo con `eleccionId` opcional.
    * @returns Cargo creado.
+   * @throws NotFoundException Si la elección indicada no existe.
    */
   async crearCargo(crearCargoDto: CrearCargoDto): Promise<ApiResponse<Cargo>> {
-    const eleccion = await this.buscarEleccionPorIdOrThrow(crearCargoDto.eleccionId);
+    const { nombre, facultad, eleccionId } = crearCargoDto;
 
-    const cargo = this.cargoRepository.create({
-      nombre: crearCargoDto.nombre,
-      facultad: crearCargoDto.facultad,
-      eleccion,
+    const guardado = await this.dataSource.transaction(async (manager) => {
+      const cargoRepo = manager.getRepository(Cargo);
+      const eleccionCargoRepo = manager.getRepository(EleccionCargo);
+
+      // Paso 1 — Crear y persistir el Cargo en el catálogo maestro
+      const cargo = cargoRepo.create({ nombre, facultad });
+      const cargoPersistido = await cargoRepo.save(cargo);
+
+      // Paso 2 — Si viene eleccionId, crear la vinculación Cargo ↔ Elección
+      if (eleccionId) {
+        const eleccionExiste = await manager
+          .getRepository(Eleccion)
+          .findOne({ where: { id: eleccionId } });
+
+        if (!eleccionExiste) {
+          throw new NotFoundException(
+            `No se encontró la elección con id ${eleccionId}.`,
+          );
+        }
+
+        const eleccionCargo = eleccionCargoRepo.create({
+          cargo: { id: cargoPersistido.id } as Cargo,
+          eleccion: { id: eleccionId } as Eleccion,
+        });
+        await eleccionCargoRepo.save(eleccionCargo);
+      }
+
+      return cargoPersistido;
     });
 
-    const guardado = await this.cargoRepository.save(cargo);
     return createApiResponse(HttpStatus.CREATED, guardado, 'Cargo creado correctamente.');
   }
 
   /**
-   * Lista todos los cargos.
-   * @returns Lista de cargos.
+   * Lista todos los cargos, incluyendo la elección a la que pertenecen.
+   * La respuesta incluye `eleccion` directamente en cada cargo para que el
+   * frontend pueda leer `position.eleccion.id` sin navegar el array.
+   *
+   * @returns Lista de cargos con su elección asociada.
    */
-  async listarCargos(): Promise<ApiResponse<Cargo[]>> {
+  async listarCargos(): Promise<ApiResponse<any[]>> {
     const cargos = await this.cargoRepository.find({
-      relations: { eleccion: true },
       order: { nombre: 'ASC' },
+      relations: ['eleccionCargos', 'eleccionCargos.eleccion'],
     });
 
-    return createApiResponse(HttpStatus.OK, cargos, 'Cargos listados correctamente.');
+    // Aplanar la relación: el frontend espera `cargo.eleccion` (objeto directo),
+    // no `cargo.eleccionCargos[]`. Tomamos el primer vínculo si existe.
+    const result = cargos.map((cargo) => {
+      const { eleccionCargos, ...rest } = cargo as any;
+      const primeraVinculacion = eleccionCargos?.[0];
+      return {
+        ...rest,
+        eleccion: primeraVinculacion?.eleccion ?? null,
+        eleccionCargoId: primeraVinculacion?.id ?? null,
+      };
+    });
+
+    return createApiResponse(HttpStatus.OK, result, 'Cargos listados correctamente.');
   }
 
   /**
-   * Obtiene un cargo por ID.
+   * Obtiene un cargo por su identificador UUID.
+   *
    * @param cargoId Identificador UUID del cargo.
    * @returns Cargo encontrado.
+   * @throws NotFoundException Si el cargo no existe.
    */
   async obtenerCargoPorId(cargoId: string): Promise<ApiResponse<Cargo>> {
     const cargo = await this.buscarCargoPorIdOrThrow(cargoId);
@@ -61,20 +114,19 @@ export class CargoService {
   }
 
   /**
-   * Actualiza un cargo por ID.
+   * Actualiza un cargo por su identificador UUID.
+   * Si se proporciona `eleccionId`, crea o reutiliza la vinculación EleccionCargo.
+   *
    * @param cargoId Identificador UUID del cargo.
    * @param actualizarCargoDto Campos a actualizar.
    * @returns Cargo actualizado.
+   * @throws NotFoundException Si el cargo o la elección no existen.
    */
   async actualizarCargo(
     cargoId: string,
     actualizarCargoDto: ActualizarCargoDto,
   ): Promise<ApiResponse<Cargo>> {
     const cargo = await this.buscarCargoPorIdOrThrow(cargoId);
-
-    if (actualizarCargoDto.eleccionId) {
-      cargo.eleccion = await this.buscarEleccionPorIdOrThrow(actualizarCargoDto.eleccionId);
-    }
 
     cargo.nombre = actualizarCargoDto.nombre ?? cargo.nombre;
     cargo.facultad = actualizarCargoDto.facultad ?? cargo.facultad;
@@ -84,9 +136,11 @@ export class CargoService {
   }
 
   /**
-   * Elimina un cargo por ID.
+   * Elimina un cargo del catálogo maestro por su identificador UUID.
+   *
    * @param cargoId Identificador UUID del cargo.
-   * @returns Resultado de eliminacion.
+   * @returns Resultado de eliminación.
+   * @throws NotFoundException Si el cargo no existe.
    */
   async eliminarCargo(cargoId: string): Promise<ApiResponse<null>> {
     const cargo = await this.buscarCargoPorIdOrThrow(cargoId);
@@ -94,24 +148,11 @@ export class CargoService {
     return createApiResponse(HttpStatus.OK, null, 'Cargo eliminado correctamente.');
   }
 
-  /**
-   * Busca una eleccion por ID o lanza excepcion.
-   * @param eleccionId Identificador UUID de la eleccion.
-   * @returns Eleccion encontrada.
-   * @throws NotFoundException Si la eleccion no existe.
-   */
-  private async buscarEleccionPorIdOrThrow(eleccionId: string): Promise<Eleccion> {
-    const eleccion = await this.eleccionRepository.findOne({ where: { id: eleccionId } });
-
-    if (!eleccion) {
-      throw new NotFoundException(`No se encontro la eleccion con id ${eleccionId}`);
-    }
-
-    return eleccion;
-  }
+  // ─── MÉTODOS PRIVADOS ────────────────────────────────────────────────────────
 
   /**
-   * Busca un cargo por ID o lanza excepcion.
+   * Busca un cargo por ID o lanza NotFoundException.
+   *
    * @param cargoId Identificador UUID del cargo.
    * @returns Cargo encontrado.
    * @throws NotFoundException Si el cargo no existe.
@@ -119,7 +160,6 @@ export class CargoService {
   private async buscarCargoPorIdOrThrow(cargoId: string): Promise<Cargo> {
     const cargo = await this.cargoRepository.findOne({
       where: { id: cargoId },
-      relations: { eleccion: true },
     });
 
     if (!cargo) {
@@ -129,3 +169,4 @@ export class CargoService {
     return cargo;
   }
 }
+

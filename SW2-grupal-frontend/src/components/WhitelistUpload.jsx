@@ -60,7 +60,13 @@ export default function WhitelistUpload({ onUpload }) {
       setIsUploading(true)
       const response = await onUpload(file)
       setResult(response)
-    } catch {
+      // Limpiar el archivo para forzar una nueva selección si editaron el Excel
+      setFile(null)
+      if (inputRef.current) {
+        inputRef.current.value = ''
+      }
+    } catch (err) {
+      console.error(err)
       // Mostramos un mensaje amigable sin exponer detalles técnicos.
       setErrorMessage('Hubo un problema al cargar el padrón. Inténtelo más tarde.')
     } finally {
@@ -131,7 +137,7 @@ export default function WhitelistUpload({ onUpload }) {
         <div className="mt-4 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-900">
           <p className="font-semibold">Padrón cargado correctamente</p>
           <p className="mt-1 text-xs text-slate-700">
-            Total: {result?.data?.total ?? '-'} · Nuevos: {result?.data?.inserted ?? '-'} · Actualizados: {result?.data?.updated ?? '-'}
+            Total: {result?.data?.totalProcesado ?? '-'} · Nuevos: {result?.data?.electoresInsertados ?? '-'} · Actualizados: {result?.data?.electoresActualizados ?? '-'}
           </p>
         </div>
       ) : null}

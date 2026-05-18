@@ -10,11 +10,9 @@ import {
     ParseUUIDPipe
 } from '@nestjs/common';
 import { Request } from 'express';
-import { AuthSaasGuard } from 'src/autenticacion/guards/auth-saas.guard';
 import { TicketValidatorContractService } from '../services/ticket-validator-contract.service';
 
 @Controller('blockchain')
-@UseGuards(AuthSaasGuard)
 export class TicketValidatorContractController {
     constructor(
         private readonly ticketValidatorContractService: TicketValidatorContractService,

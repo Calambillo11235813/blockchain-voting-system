@@ -33,12 +33,16 @@ export class AdminsService {
 
   /**
    * Crea un administrador.
+   * @param nombre Nombre del administrador.
+   * @param apellido Apellido del administrador.
    * @param correo Correo del administrador.
    * @param passwordHash Contraseña hasheada.
    * @returns Administrador creado.
    */
-  async crearAdministrador(correo: string, passwordHash: string): Promise<Administrador> {
+  async crearAdministrador(nombre: string, apellido: string, correo: string, passwordHash: string): Promise<Administrador> {
     const administrador = this.administradorRepository.create({
+      nombre,
+      apellido,
       correo,
       password: passwordHash,
     });

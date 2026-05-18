@@ -1,27 +1,31 @@
-import { Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
-import { Eleccion } from 'src/elecciones/entities/eleccion.entity';
-import { Frente } from 'src/elecciones/entities/frente.entity';
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import { EleccionCargo } from './eleccion-cargo.entity';
 
 /**
- * Entidad que representa un cargo en disputa dentro de una eleccion.
+ * Catálogo maestro de cargos universitarios disponibles para ser disputados
+ * en elecciones (ej. Rector, Decano, Representante Estudiantil).
+ *
+ * Al desacoplarse de una Elección concreta, el mismo Cargo puede reutilizarse
+ * en múltiples gestiones a través de la clase asociación EleccionCargo.
  */
 @Entity('cargo')
 export class Cargo {
-	@PrimaryGeneratedColumn('uuid')
-	id: string;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-	@Column('text', { nullable: false })
-	nombre: string;
+  /** Nombre del cargo universitario (ej. "Rector", "Decano de Tecnología"). */
+  @Column('text', { nullable: false })
+  nombre: string;
 
-	@Column('text', { nullable: false })
-	facultad: string;
+  /** Facultad o unidad académica a la que pertenece este cargo. */
+  @Column('text', { nullable: false })
+  facultad: string;
 
-	@ManyToOne(() => Eleccion, (eleccion) => eleccion.cargos, {
-		nullable: false,
-		onDelete: 'CASCADE',
-	})
-	eleccion: Eleccion;
+  // ─── Relaciones ──────────────────────────────────────────────────────────────
 
-	@OneToMany(() => Frente, (frente) => frente.cargo, { cascade: false })
-	frentes: Frente[];
+  /**
+   * Instancias temporales en que este cargo ha sido disputado en elecciones.
+   */
+  @OneToMany(() => EleccionCargo, (ec) => ec.cargo)
+  eleccionCargos: EleccionCargo[];
 }

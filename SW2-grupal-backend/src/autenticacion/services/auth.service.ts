@@ -9,73 +9,79 @@ import { JwtService } from '@nestjs/jwt';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { LoginDTO } from 'src/autenticacion/dto/login.dto';
 import { AuthResponse } from 'src/autenticacion/interfaces/auth.interface';
-import { EstudiantesService } from 'src/estudiantes/estudiantes.service';
 import { JwtPayload } from 'src/autenticacion/interfaces/jwt-payload.interface';
 import { LoginAdminDto } from 'src/autenticacion/dto/login-admin.dto';
 import { AdminsService } from 'src/administradores/admins.service';
-import { EleccionesService } from 'src/elecciones/services/elecciones.service';
+import { EleccionesLegacyService } from 'src/elecciones/services/elecciones.service';
+import { ElectoresService } from 'src/electores/electores.service';
+import { PadronService } from 'src/elecciones/services/padron.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly estudiantesService: EstudiantesService,
+    private readonly electoresService: ElectoresService,
+    private readonly padronService: PadronService,
     private readonly adminsService: AdminsService,
-    private readonly eleccionesService: EleccionesService,
+    private readonly eleccionesService: EleccionesLegacyService,
     private readonly jwtService: JwtService,
-
   ) { }
 
 
   /**
-   * Inicia sesión de estudiante (HU-002).
-   * @param loginDTO Datos de inicio de sesión.
-   * @returns Token JWT.
-   * @throws UnauthorizedException si las credenciales no son válidas o el estudiante no está habilitado.
+   * Inicia sesión de un elector (Estudiante o Docente) (RF2).
+   * @param registro Número de registro universitario.
+   * @param passwordInstitucional Contraseña simulada (iniciales de apellidos + CI).
+   * @param eleccionId UUID de la elección en la que desea participar.
+   * @returns Token JWT de sesión y datos del elector.
+   * @throws UnauthorizedException si las credenciales no son válidas.
    */
-  async loginEstudiante(loginDTO: LoginDTO): Promise<ApiResponse<AuthResponse>> {
+  async loginElector(registro: string, passwordInstitucional: string, eleccionId?: string): Promise<{ token: string; elector: any }> {
     try {
-      const { registro, password } = loginDTO;
+      // Paso A (Identidad Global): Validar que la identidad existe en el catálogo maestro.
+      const elector = await this.electoresService.buscarPorRegistro(registro);
 
-      const estudiante = await this.estudiantesService.buscarEstudiantePorRegistro(registro);
-
-      if (!estudiante || !estudiante.estaHabilitado) {
-        throw new UnauthorizedException('Credenciales inválidas');
+      // Paso B (Credenciales UAGRM): Simular validación contra el protocolo de la universidad.
+      const expectedPassword = this.calcularPasswordEsperado(elector.apellido, elector.ci);
+      if (String(passwordInstitucional || '').trim() !== expectedPassword) {
+        throw new UnauthorizedException('Credenciales institucionales inválidas');
       }
 
-      const expectedPassword = this.calcularPasswordEsperado(estudiante.apellidos, estudiante.ci);
-
-      if (String(password || '').trim() !== expectedPassword) {
-        throw new UnauthorizedException('Credenciales inválidas');
+      // Paso C (Validación en Whitelist): Garantizar que el elector está habilitado para el comicio.
+      // Si el frontend no mandó la elección, inferimos la elección activa del día
+      let targetEleccionId = eleccionId;
+      if (!targetEleccionId) {
+        const eleccionActiva = await this.eleccionesService.obtenerEleccionActivaDelDia();
+        if (!eleccionActiva) {
+          throw new ForbiddenException('No hay ninguna elección activa programada para hoy.');
+        }
+        targetEleccionId = eleccionActiva.id;
       }
 
-      // NOTA: La validación de horario y restricción alfabética (HU-004) 
-      // fue migrada al middleware ElectionGuard y a EleccionesService.validarAccesoVotante
-      // para cumplir con las nuevas reglas. 
+      await this.padronService.validarAccesoVotante(registro, targetEleccionId);
 
+      // Paso D (Sesión/JWT): Generar token con payload de sesión
       const payload: JwtPayload = {
-        sub: estudiante.id,
-        registro: estudiante.registro,
-        role: 'ESTUDIANTE',
+        sub: elector.id,
+        registro: elector.registro,
+        role: elector.estamento,
       };
 
       const token = this.getToken(payload);
 
       return {
-        statusCode: HttpStatus.OK,
-        message: "Inicio de sesión exitoso",
-        data: {
-          token
-        }
+        token,
+        elector,
       };
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
+      if (error instanceof UnauthorizedException || error instanceof ForbiddenException) {
         throw error;
       }
-      if (error instanceof ForbiddenException) {
-        throw error;
+      // Considerar errores lanzados por PadronService como NotFoundException
+      if (error.status === HttpStatus.NOT_FOUND) {
+        throw new UnauthorizedException('Identidad no encontrada o no habilitada en el padrón');
       }
-      throw new InternalServerErrorException(`Error del servidor: ${JSON.stringify(error)}`);
+      throw new InternalServerErrorException(`Error del servidor: ${error.message || JSON.stringify(error)}`);
     }
   }
 

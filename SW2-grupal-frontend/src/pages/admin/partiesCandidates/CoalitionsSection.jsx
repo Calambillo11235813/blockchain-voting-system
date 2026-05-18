@@ -108,7 +108,7 @@ export default function CoalitionsSection({
     setCoalitionForm({
       nombreFrente: coalition.nombreFrente || '',
       sigla: coalition.sigla || '',
-      cargoId: coalition?.cargo?.id || '',
+      cargoId: coalition?.eleccionCargoId || '',
       logoFile: null,
       logoPreview: coalition.logoUrl || '',
       existingLogoUrl: coalition.logoUrl || '',
@@ -237,7 +237,7 @@ export default function CoalitionsSection({
           >
             <option value="">Seleccione un cargo</option>
             {positions.map((position) => (
-              <option key={position.id} value={position.id}>
+              <option key={position.id} value={position.eleccionCargoId || ''}>
                 {position.nombre}
               </option>
             ))}

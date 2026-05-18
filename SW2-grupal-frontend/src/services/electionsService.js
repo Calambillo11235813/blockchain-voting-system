@@ -74,7 +74,8 @@ export async function fetchFrentes() {
  * @returns {Promise<Frente>}
  */
 export async function createFrente(payload) {
-  const response = await api.post('/elecciones/frente', payload)
+  const { cargoId, ...data } = payload
+  const response = await api.post(`/elecciones/frente/${cargoId}`, data)
   return response?.data?.data
 }
 
@@ -85,7 +86,8 @@ export async function createFrente(payload) {
  * @returns {Promise<Frente>}
  */
 export async function updateFrente(frenteId, payload) {
-  const response = await api.patch(`/elecciones/frente/${frenteId}`, payload)
+  const { cargoId, ...data } = payload // El backend no permite actualizar el cargo asociado al frente
+  const response = await api.patch(`/elecciones/frente/${frenteId}`, data)
   return response?.data?.data
 }
 

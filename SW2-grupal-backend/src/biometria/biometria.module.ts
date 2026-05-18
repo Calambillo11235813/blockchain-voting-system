@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { EstudiantesModule } from '../estudiantes/estudiantes.module';
 import { BiometriaController } from './biometria.controller';
 import { BiometriaService } from './biometria.service';
+import { ElectoresModule } from '../electores/electores.module';
 
 @Module({
-  imports: [EstudiantesModule],
+  imports: [ElectoresModule],
   controllers: [BiometriaController],
   providers: [BiometriaService],
 })

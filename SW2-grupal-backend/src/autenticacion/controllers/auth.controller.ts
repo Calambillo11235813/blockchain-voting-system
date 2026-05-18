@@ -21,8 +21,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() loginDTO: LoginDTO,
-  ): Promise<ApiResponse<AuthResponse>> {
-    return await this.authService.loginEstudiante(loginDTO);
+  ) {
+    const result = await this.authService.loginElector(loginDTO.registro, loginDTO.password, loginDTO.eleccionId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: "Inicio de sesión exitoso",
+      data: result
+    };
   }
 
   /**
@@ -47,8 +52,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async loginSaaS(
     @Body() loginDTO: LoginDTO,
-  ): Promise<ApiResponse<AuthResponse>> {
-    return await this.authService.loginEstudiante(loginDTO);
+  ) {
+    const result = await this.authService.loginElector(loginDTO.registro, loginDTO.password, loginDTO.eleccionId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: "Inicio de sesión exitoso",
+      data: result
+    };
   }
 
   // Estos métodos están comentados en el servicio, así que los comentaré aquí también

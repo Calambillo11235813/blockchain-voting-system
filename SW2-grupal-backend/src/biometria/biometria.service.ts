@@ -6,8 +6,8 @@ import { unlink } from 'fs/promises';
 import { TextDecoder, TextEncoder } from 'util';
 import sharp from 'sharp';
 import { createWorker } from 'tesseract.js';
-import { EstudiantesService } from '../estudiantes/estudiantes.service';
-import { Estudiante } from '../estudiantes/entities/estudiante.entity';
+import { ElectoresService } from '../electores/electores.service';
+import { Elector } from '../electores/entities/elector.entity';
 import { ArchivosBiometriaValidados } from './dto/validar-identidad-archivos.dto';
 
 interface ResultadoOcrCarnet {
@@ -19,7 +19,7 @@ interface ResultadoOcrCarnet {
 
 export interface ResultadoValidacionIdentidad {
   verificado: boolean;
-  datosEstudiante: Estudiante;
+  datosElector: Elector;
 }
 
 @Injectable()
@@ -43,7 +43,7 @@ export class BiometriaService {
     String(process.env.BYPASS_BIOMETRIA_FACE_MATCH || '').toLowerCase() === 'true';
 
   constructor(
-    private readonly estudiantesService: EstudiantesService,
+    private readonly electoresService: ElectoresService,
   ) { }
 
   /**
@@ -86,22 +86,22 @@ export class BiometriaService {
       });
 
       let ciSeleccionado = datosCarnet.ci;
-      let estudiante: Estudiante | null = null;
+      let elector: Elector | null = null;
       for (const candidato of candidatosCi) {
         const candidatoNormalizado = String(candidato || '').trim();
         if (!candidatoNormalizado || this.pareceFecha(candidatoNormalizado)) {
           continue;
         }
 
-        const encontrado = await this.estudiantesService.buscarEstudiantePorCi(candidatoNormalizado);
+        const encontrado = await this.electoresService.buscarPorCi(candidatoNormalizado);
         if (encontrado) {
           ciSeleccionado = candidatoNormalizado;
-          estudiante = encontrado;
+          elector = encontrado;
           break;
         }
       }
 
-      if (!estudiante) {
+      if (!elector) {
         throw new BadRequestException('El numero de carnet no existe en el padron.');
       }
 
@@ -109,8 +109,8 @@ export class BiometriaService {
         ciSeleccionado,
       });
 
-      const coincideNombres = this.camposCoincidenConTolerancia(estudiante.nombres, datosCarnet.nombres);
-      const coincideApellidos = this.camposCoincidenConTolerancia(estudiante.apellidos, datosCarnet.apellidos);
+      const coincideNombres = this.camposCoincidenConTolerancia(elector.nombre, datosCarnet.nombres);
+      const coincideApellidos = this.camposCoincidenConTolerancia(elector.apellido, datosCarnet.apellidos);
 
       if (!coincideNombres || !coincideApellidos) {
         throw new BadRequestException('Los datos del carnet no coinciden con el padron.');
@@ -127,7 +127,7 @@ export class BiometriaService {
 
       return {
         verificado: true,
-        datosEstudiante: estudiante,
+        datosElector: elector,
       };
     } catch (error: unknown) {
       this.logDebug(traceId, 'Error en verificacion biometrica', {

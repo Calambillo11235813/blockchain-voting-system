@@ -28,11 +28,13 @@ export class AdministradorInitService implements OnApplicationBootstrap {
         return;
       }
 
+      const nombre = 'Administrador';
+      const apellido = 'Sistema';
       const correo = 'admin@uagrm.edu.bo';
       const passwordPlano = 'Admin123!';
       const passwordHash = await bcrypt.hash(passwordPlano, 10);
 
-      await this.adminsService.crearAdministrador(correo, passwordHash);
+      await this.adminsService.crearAdministrador(nombre, apellido, correo, passwordHash);
       this.logger.log('Administrador por defecto creado');
     } catch (error) {
       this.logger.error('No se pudo crear el administrador por defecto', error instanceof Error ? error.stack : undefined);

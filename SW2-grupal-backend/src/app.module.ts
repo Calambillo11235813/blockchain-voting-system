@@ -5,14 +5,13 @@ import { envSchema } from './config/env/env.schema';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './autenticacion/auth.module';
 import { EleccionesModule } from './elecciones/elecciones.module';
-import { EstudiantesModule } from './estudiantes/estudiantes.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { SeedModule } from './seed/seed.module';
-import { UserModule } from './estudiantes/usuarios/user.module';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AdminsModule } from './administradores/admins.module';
 import { BiometriaModule } from './biometria/biometria.module';
+import { ElectoresModule } from './electores/electores.module';
 
 
 @Module({
@@ -50,12 +49,11 @@ import { BiometriaModule } from './biometria/biometria.module';
     }),
     AuthModule,
     EleccionesModule,
-    EstudiantesModule,
     BlockchainModule,
     SeedModule,
-    UserModule,
     AdminsModule,
     BiometriaModule,
+    ElectoresModule,
   ],
   // providers: [
   //   LogsService,
