@@ -100,7 +100,7 @@ export default function Login() {
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-blue-900">Ingreso</h2>
               <p className="mt-1 text-sm text-slate-700">
-                Ingrese su <span className="font-semibold">registro</span> (estudiantes) o su
+                Ingrese su <span className="font-semibold">registro</span> (elector) o su
                 <span className="font-semibold"> correo</span> (administración) y su contraseña.
               </p>
             </div>
