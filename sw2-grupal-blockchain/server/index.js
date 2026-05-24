@@ -1,77 +1,49 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const path = require('path');
 const { exec } = require('child_process');
 
 const app = express();
 app.use(bodyParser.json());
 
-app.post('/deploy-tenant-contract', (req, res) => {
-    exec('npx hardhat run deploy/Tenant.ts --network zkSyncSepolia', (error, stdout, stderr) => {
-        if (error) {
-            return res.status(500).json({ message: 'Error al desplegar el contrato de Tenant', error: error.message });
-        }
-        if (stderr) {
-            return res.status(500).json({ message: 'Error al desplegar el contrato de Tenant', error: stderr });
-        }
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const DEFAULT_NETWORK = process.env.DEPLOY_NETWORK || 'sepolia';
+const ALLOWED_NETWORKS = new Set(['sepolia', 'localhost']);
 
-        console.log(stdout);
-        const contractAddress = extractAddressFromOutput(stdout);
-        if (!contractAddress) {
-            return res.status(500).json({ message: 'No se pudo obtener la dirección del contrato de Tenant' });
-        }
-
-        res.json({
-            "message": "Contrato de Tenant desplegado correctamente",
-            "contractTenant": contractAddress
-        });
-    });
+app.get('/health', (_req, res) => {
+    res.json({ ok: true });
 });
 
-app.post('/deploy-election-contract', (req, res) => {
-    exec('npx hardhat run deploy/Election.ts --network zkSyncSepolia', (error, stdout, stderr) => {
+app.post('/deploy-votacion', (req, res) => {
+    const requestedNetwork = String(req.body?.network || DEFAULT_NETWORK).toLowerCase();
+    if (!ALLOWED_NETWORKS.has(requestedNetwork)) {
+        return res.status(400).json({
+            message: 'Red no permitida. Usa sepolia o localhost.',
+        });
+    }
+
+    const command = `npx hardhat ignition deploy ./ignition/modules/Votacion.ts --network ${requestedNetwork}`;
+    exec(command, { cwd: PROJECT_ROOT }, (error, stdout, stderr) => {
         if (error) {
             return res.status(500).json({ message: 'Error al desplegar el contrato', error: error.message });
         }
+
         if (stderr) {
-            return res.status(500).json({ message: 'Error al desplegar el contrato', error: stderr });
+            console.log('Warning/Stderr:', stderr);
         }
 
         const contractAddress = extractAddressFromOutput(stdout);
         if (!contractAddress) {
-            return res.status(500).json({ message: 'No se pudo obtener la dirección del contrato' });
-        }
-
-        res.json({
-            "message": "Contrato de Election desplegado correctamente",
-            "contractElection": contractAddress
-        });
-    });
-});
-
-app.post('/deploy-ticket-validator-contract', (req, res) => {
-    exec('npx hardhat run deploy/TicketValidator.ts --network zkSyncSepolia', (error, stdout, stderr) => {
-        if (error) {
-            return res.status(500).json({ 
-                message: 'Error al desplegar el contrato de TicketValidator', 
-                error: error.message 
-            });
-        }
-        if (stderr) {
-            console.log('Warning/Stderr:', stderr); // Algunos stderr pueden ser warnings, no errores fatales
-        }
-
-        console.log('Stdout:', stdout);
-        const contractAddress = extractAddressFromOutput(stdout);
-        if (!contractAddress) {
-            return res.status(500).json({ 
-                message: 'No se pudo obtener la dirección del contrato de TicketValidator',
-                output: stdout 
+            return res.status(500).json({
+                message: 'No se pudo obtener la direccion del contrato',
+                output: stdout,
             });
         }
 
-        res.json({
-            "message": "Contrato de TicketValidator desplegado correctamente",
-            "contractTicketValidator": contractAddress
+        return res.json({
+            message: 'Contrato Votacion desplegado correctamente',
+            network: requestedNetwork,
+            contractAddress,
         });
     });
 });

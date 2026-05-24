@@ -3,17 +3,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 
 const SIDEBAR_ITEMS = [
-  { key: 'dashboard', label: 'Dashboard', to: '/admin/dashboard' },
-  { key: 'registry', label: 'Padrón Electoral', to: '/admin/padron' },
-  { key: 'election', label: 'Gestión de Elección', to: '/admin/gestion-eleccion' },
-  { key: 'parties', label: 'Frente y Candidatos', to: '/admin/frentes-candidatos' },
-  { key: 'ballot', label: 'Configuración de Papeleta', to: '/admin/configuracion-papeleta' },
-  { key: 'audit', label: 'Auditoría y Resultados', to: '/admin/auditoria-resultados' },
-  { key: 'estadisticas', label: 'Estadísticas en Vivo', to: '/admin/estadisticas-vivo' },
+  { key: 'dashboard', label: 'Dashboard', to: '/admin/dashboard', rolesRequeridos: ['ELECTORAL'] },
+  { key: 'dashboard-sistemas', label: 'Dashboard', to: '/admin/dashboard-sistemas', rolesRequeridos: ['SISTEMAS'] },
+  { key: 'registry', label: 'Padrón Electoral', to: '/admin/padron', rolesRequeridos: ['ELECTORAL'] },
+  { key: 'election', label: 'Gestión de Elección', to: '/admin/gestion-eleccion', rolesRequeridos: ['ELECTORAL'] },
+  { key: 'parties', label: 'Frente y Candidatos', to: '/admin/frentes-candidatos', rolesRequeridos: ['ELECTORAL'] },
+  { key: 'ballot', label: 'Configuración de Papeleta', to: '/admin/configuracion-papeleta', rolesRequeridos: ['ELECTORAL'] },
+  { key: 'audit', label: 'Auditoría y Resultados', to: '/admin/auditoria-resultados', rolesRequeridos: ['ELECTORAL'] },
+  { key: 'estadisticas', label: 'Estadísticas en Vivo', to: '/admin/estadisticas-vivo', rolesRequeridos: ['ELECTORAL'] },
   { key: 'admins', label: 'Gestión de Admins', to: '/admin/admins', rolesRequeridos: ['SISTEMAS'] },
   { key: 'configuracion', label: 'Configuración del Sistema', to: '/admin/configuracion', rolesRequeridos: ['SISTEMAS'] },
   { key: 'nodos', label: 'Monitoreo de Nodos', to: '/admin/nodos', rolesRequeridos: ['SISTEMAS'] },
-  { key: 'auditoria', label: 'Auditoría Blockchain', to: '/admin/auditoria' },
+  { key: 'auditoria', label: 'Auditoría Blockchain', to: '/admin/auditoria', rolesRequeridos: ['SISTEMAS'] },
 ]
 
 /**
@@ -29,14 +30,18 @@ const SIDEBAR_ITEMS = [
 export default function AdminLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { logout } = useAuth()
+  const { logout, role } = useAuth()
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const activeItem = useMemo(() => {
     const match = SIDEBAR_ITEMS.find((item) => location.pathname.startsWith(item.to))
-    return match?.label || 'Panel de Administración Electoral'
+    return match?.label || 'Panel'
   }, [location.pathname])
+
+  const panelTitle = role === 'SISTEMAS' 
+    ? 'Panel de Administración del Sistema'
+    : 'Panel de Administración Electoral'
 
   const handleLogout = () => {
     logout()
@@ -69,8 +74,8 @@ export default function AdminLayout() {
 
               <div>
                 <h1 className="text-base font-semibold text-white sm:text-lg">
-                  <span className="hidden sm:inline">Panel de Administración Electoral</span>
-                  <span className="sm:hidden">Administración Electoral</span>
+                  <span className="hidden sm:inline">{panelTitle}</span>
+                  <span className="sm:hidden">Administración</span>
                 </h1>
                 <p className="mt-1 hidden text-sm text-white/90 sm:block">{activeItem}</p>
               </div>
@@ -153,12 +158,12 @@ export default function AdminLayout() {
  * @returns {import('react').JSX.Element}
  */
 function AdminSidebar() {
-  const { usuario } = useAuth()
+  const { role } = useAuth()
 
   // Filtrar items según los roles requeridos del usuario
   const itemsVisibles = SIDEBAR_ITEMS.filter((item) => {
     if (!item.rolesRequeridos) return true
-    return item.rolesRequeridos.includes(usuario?.rol)
+    return item.rolesRequeridos.includes(role)
   })
 
   return (

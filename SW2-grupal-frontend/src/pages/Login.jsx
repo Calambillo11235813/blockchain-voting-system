@@ -64,7 +64,16 @@ export default function Login() {
       })
 
       const role = getRoleFromToken(token)
-      const nextPath = role === 'ADMIN' ? '/admin/dashboard' : '/estudiante/biometria'
+      const isAdminRole = ['ADMIN', 'SISTEMAS', 'ELECTORAL'].includes(role)
+      
+      let nextPath = '/estudiante/biometria'
+      if (isAdminRole) {
+        if (role === 'SISTEMAS') {
+          nextPath = '/admin/dashboard-sistemas'
+        } else {
+          nextPath = '/admin/dashboard'
+        }
+      }
       navigate(nextPath, { replace: true })
     } catch (error) {
       const respData = error?.response?.data

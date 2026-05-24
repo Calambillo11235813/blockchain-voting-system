@@ -69,7 +69,7 @@ export function AuthProvider({ children }) {
       student,
       role,
       isAuthenticated: Boolean(token),
-      isAdmin: role === 'ADMIN',
+      isAdmin: ['ADMIN', 'SISTEMAS', 'ELECTORAL'].includes(role),
       isStudent: role === 'ESTUDIANTE',
       login,
       logout,

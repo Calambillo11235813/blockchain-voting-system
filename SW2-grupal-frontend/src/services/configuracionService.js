@@ -11,7 +11,7 @@ import { api } from './api'
  * @returns {Promise<Array>} Lista de parámetros del sistema
  */
 export async function obtenerParametros() {
-  const response = await api.get('/configuracion')
+  const response = await api.get('/admin/configuracion')
   return response?.data?.data || []
 }
 
@@ -22,7 +22,7 @@ export async function obtenerParametros() {
  * @returns {Promise<Object>} Parámetro del sistema
  */
 export async function obtenerParametro(clave) {
-  const response = await api.get(`/configuracion/${clave}`)
+  const response = await api.get(`/admin/configuracion/${clave}`)
   return response?.data?.data || {}
 }
 
@@ -37,7 +37,7 @@ export async function obtenerParametro(clave) {
  * @returns {Promise<Object>} Parámetro actualizado
  */
 export async function actualizarParametro(clave, datos) {
-  const response = await api.patch(`/configuracion/${clave}`, datos)
+  const response = await api.patch(`/admin/configuracion/${clave}`, datos)
   return response?.data?.data || {}
 }
 
@@ -53,7 +53,7 @@ export async function actualizarParametro(clave, datos) {
  * @returns {Promise<Object>} Parámetro creado
  */
 export async function crearParametro(datos) {
-  const response = await api.post('/configuracion', datos)
+  const response = await api.post('/admin/configuracion', datos)
   return response?.data?.data || {}
 }
 
@@ -65,6 +65,6 @@ export async function crearParametro(datos) {
  * @returns {Promise<Object>} Respuesta de éxito
  */
 export async function eliminarParametro(clave) {
-  const response = await api.delete(`/configuracion/${clave}`)
+  const response = await api.delete(`/admin/configuracion/${clave}`)
   return response?.data?.data || {}
 }

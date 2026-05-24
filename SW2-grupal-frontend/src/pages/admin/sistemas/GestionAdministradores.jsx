@@ -7,16 +7,16 @@ import {
 import { useAuth } from '../../../context/AuthContext'
 
 export default function GestionAdministradores() {
-  const { usuario } = useAuth()
+  const { role } = useAuth()
   const [admins, setAdmins] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({ correo: '', password: '', rol: 'ELECTORAL' })
+  const [formData, setFormData] = useState({ nombre: '', apellido: '', correo: '', password: '', rol: 'ELECTORAL' })
   const [submitting, setSubmitting] = useState(false)
 
   // Solo SISTEMAS puede gestionar administradores
-  const esAdmin = usuario?.rol === 'SISTEMAS'
+  const esAdmin = role === 'SISTEMAS'
 
   useEffect(() => {
     cargarAdministradores()
@@ -38,7 +38,7 @@ export default function GestionAdministradores() {
 
   const handleCrearAdmin = async (e) => {
     e.preventDefault()
-    if (!formData.correo || !formData.password) {
+    if (!formData.nombre || !formData.apellido || !formData.correo || !formData.password) {
       setError('Por favor rellena todos los campos')
       return
     }
@@ -47,7 +47,7 @@ export default function GestionAdministradores() {
       setSubmitting(true)
       setError(null)
       await crearAdministrador(formData)
-      setFormData({ correo: '', password: '', rol: 'ELECTORAL' })
+      setFormData({ nombre: '', apellido: '', correo: '', password: '', rol: 'ELECTORAL' })
       setShowForm(false)
       await cargarAdministradores()
     } catch (err) {
@@ -76,7 +76,7 @@ export default function GestionAdministradores() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gestión de Administradores</h1>
-          <p className="mt-1 text-gray-600">Crear, listar y eliminar cuentas administrativas (CU-01)</p>
+          <p className="mt-1 text-gray-600">Crear, listar y eliminar cuentas administrativas</p>
         </div>
         {esAdmin && (
           <button
@@ -106,6 +106,31 @@ export default function GestionAdministradores() {
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow">
           <h2 className="mb-4 text-xl font-semibold text-gray-900">Crear Nuevo Administrador</h2>
           <form onSubmit={handleCrearAdmin} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Nombre</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                  placeholder="Ej. Juan"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Apellido</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.apellido}
+                  onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
+                  placeholder="Ej. Pérez"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Email</label>
               <input

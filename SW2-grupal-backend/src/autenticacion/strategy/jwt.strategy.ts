@@ -25,7 +25,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<Elector | Administrador> {
-    if (payload.role === 'ADMIN') {
+    // Reconocer todos los roles administrativos: ADMIN (legado), SISTEMAS y ELECTORAL
+    const esAdministrador = payload.role === 'ADMIN' || payload.role === 'SISTEMAS' || payload.role === 'ELECTORAL';
+
+    if (esAdministrador) {
       const administrador = await this.administradorRepository.findOne({
         where: { id: payload.sub },
       });

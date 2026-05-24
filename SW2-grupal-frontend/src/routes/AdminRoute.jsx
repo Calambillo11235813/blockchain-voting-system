@@ -17,7 +17,7 @@ export default function AdminRoute() {
     return <Navigate to="/login" replace />
   }
 
-  if (role !== 'ADMIN') {
+  if (role !== 'ADMIN' && role !== 'SISTEMAS' && role !== 'ELECTORAL') {
     return <Navigate to="/unauthorized" replace />
   }
 

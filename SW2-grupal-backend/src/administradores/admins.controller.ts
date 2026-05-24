@@ -7,6 +7,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { JwtAuthGuard } from 'src/autenticacion/guards/jwt-auth.guard';
 import { AdminsService } from './admins.service';
 import { ActualizarPerfilAdminDto } from './dto/actualizar-perfil.dto';
 import { CambiarPasswordAdminDto } from './dto/cambiar-password.dto';
+import { CrearAdministradorDto } from './dto/crear-administrador.dto';
 import { SistemasGuard } from './guards/sistemas.guard';
 import { createApiResponse, ApiResponse } from 'src/compartido/respuesta';
 
@@ -82,6 +84,23 @@ export class AdminsController {
       HttpStatus.OK,
       listado,
       'Listado de administradores obtenido correctamente.',
+    );
+  }
+
+  /**
+   * Crea un nuevo administrador.
+   * Solo accesible por administradores con rol de SISTEMAS.
+   */
+  @Post()
+  @UseGuards(SistemasGuard)
+  async crearAdministrador(
+    @Body() dto: CrearAdministradorDto,
+  ): Promise<ApiResponse<any>> {
+    const admin = await this.adminsService.crearAdministradorDesdeDto(dto);
+    return createApiResponse(
+      HttpStatus.OK,
+      admin,
+      'Administrador creado correctamente.',
     );
   }
 

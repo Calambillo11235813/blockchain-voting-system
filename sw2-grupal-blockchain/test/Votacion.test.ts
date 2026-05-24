@@ -99,4 +99,32 @@ describe("Votacion (Hash-Based)", () => {
     expect(await votacion.obtenerTotalVotos(eleccionId)).to.equal(3);
     expect(await votacion.totalVotosGlobal()).to.equal(3);
   });
+
+  it("Caso 9: retorna 0 cuando no hay votos", async () => {
+    const votacion = await desplegarContrato();
+
+    expect(await votacion.obtenerVotos(eleccionId, candidatoA)).to.equal(0);
+    expect(await votacion.obtenerTotalVotos(eleccionId)).to.equal(0);
+    expect(await votacion.totalVotosGlobal()).to.equal(0);
+  });
+
+  it("Caso 10: los totales por eleccion son independientes", async () => {
+    const votacion = await desplegarContrato();
+
+    await votacion.votar(eleccionId, candidatoA, elector1);
+    await votacion.votar(eleccionId, candidatoB, elector2);
+
+    expect(await votacion.obtenerTotalVotos(eleccionId)).to.equal(2);
+    expect(await votacion.obtenerTotalVotos(eleccionId2)).to.equal(0);
+    expect(await votacion.totalVotosGlobal()).to.equal(2);
+  });
+
+  it("Caso 11: candidato sin votos mantiene conteo en cero", async () => {
+    const votacion = await desplegarContrato();
+
+    await votacion.votar(eleccionId, candidatoA, elector1);
+
+    expect(await votacion.obtenerVotos(eleccionId, candidatoA)).to.equal(1);
+    expect(await votacion.obtenerVotos(eleccionId, candidatoB)).to.equal(0);
+  });
 });

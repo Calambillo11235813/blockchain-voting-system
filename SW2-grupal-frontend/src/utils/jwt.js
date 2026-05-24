@@ -33,13 +33,13 @@ export function decodeJwtPayload(token) {
 /**
  * Obtiene el rol del usuario desde el JWT.
  * @param {string | null | undefined} token JWT.
- * @returns {'ADMIN' | 'ESTUDIANTE' | null} Rol si existe, caso contrario null.
+ * @returns {'ADMIN' | 'SISTEMAS' | 'ELECTORAL' | 'ESTUDIANTE' | null} Rol si existe, caso contrario null.
  */
 export function getRoleFromToken(token) {
   const payload = decodeJwtPayload(token)
   const role = payload?.role
 
-  if (role === 'ADMIN' || role === 'ESTUDIANTE') {
+  if (role === 'ADMIN' || role === 'SISTEMAS' || role === 'ELECTORAL' || role === 'ESTUDIANTE') {
     return role
   }
 

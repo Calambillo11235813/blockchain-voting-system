@@ -12,7 +12,7 @@ import { api } from './api'
  * @returns {Promise<Array>} Lista de administradores
  */
 export async function obtenerAdministradores() {
-  const response = await api.get('/admin/admins')
+  const response = await api.get('/admins')
   return response?.data?.data || []
 }
 
@@ -22,7 +22,7 @@ export async function obtenerAdministradores() {
  * @returns {Promise<Object>} Datos del administrador actual
  */
 export async function obtenerPerfil() {
-  const response = await api.get('/admin/admins/perfil')
+  const response = await api.get('/admins/perfil')
   return response?.data?.data || {}
 }
 
@@ -37,7 +37,7 @@ export async function obtenerPerfil() {
  * @returns {Promise<Object>} Administrador creado
  */
 export async function crearAdministrador(datos) {
-  const response = await api.post('/admin/admins', datos)
+  const response = await api.post('/admins', datos)
   return response?.data?.data || {}
 }
 
@@ -50,7 +50,7 @@ export async function crearAdministrador(datos) {
  * @returns {Promise<Object>} Respuesta de éxito
  */
 export async function cambiarContrasena(datos) {
-  const response = await api.patch('/admin/admins/cambiar-contrasena', datos)
+  const response = await api.patch('/admins/cambiar-contrasena', datos)
   return response?.data?.data || {}
 }
 
@@ -62,6 +62,6 @@ export async function cambiarContrasena(datos) {
  * @returns {Promise<Object>} Respuesta de éxito
  */
 export async function eliminarAdministrador(adminId) {
-  const response = await api.delete(`/admin/admins/${adminId}`)
+  const response = await api.delete(`/admins/${adminId}`)
   return response?.data?.data || {}
 }

@@ -6,8 +6,11 @@ import BiometriaCapture from '../pages/BiometriaCapture'
 import VotingBallot from '../pages/VotingBallot'
 import AdminRoute from './AdminRoute'
 import StudentRoute from './StudentRoute'
+import RoleRoute from './RoleRoute'
+import DashboardRouter from './DashboardRouter'
 import AdminLayout from '../layouts/AdminLayout'
 import ResumenAdmin from '../pages/admin/compartido/ResumenAdmin'
+import DashboardSistemas from '../pages/admin/sistemas/DashboardSistemas'
 import GestionPadron from '../pages/admin/electoral/GestionPadron'
 import GestionFrentesCandidatos from '../pages/admin/electoral/GestionFrentesCandidatos'
 import ConfiguracionPapeleta from '../pages/admin/electoral/ConfiguracionPapeleta'
@@ -33,18 +36,103 @@ export default function AppRoutes() {
       {/* Rutas protegidas por rol */}
       <Route element={<AdminRoute />}>
         <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<ResumenAdmin />} />
-          <Route path="padron" element={<GestionPadron />} />
-          <Route path="frentes-candidatos" element={<GestionFrentesCandidatos />} />
-          <Route path="configuracion-papeleta" element={<ConfiguracionPapeleta />} />
-          <Route path="gestion-eleccion" element={<GestionElecciones />} />
-          <Route path="auditoria-resultados" element={<ResultadosAuditoria />} />
-          <Route path="estadisticas-vivo" element={<EstadisticasEnVivo />} />
-          <Route path="admins" element={<GestionAdministradores />} />
-          <Route path="configuracion" element={<ConfiguracionSistema />} />
-          <Route path="nodos" element={<MonitoreoNodos />} />
-          <Route path="auditoria" element={<AuditoriaBlockchain />} />
+          <Route index element={<DashboardRouter />} />
+          <Route
+            path="dashboard"
+            element={
+              <RoleRoute allowedRoles={['ELECTORAL']}>
+                <ResumenAdmin />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="dashboard-sistemas"
+            element={
+              <RoleRoute allowedRoles={['SISTEMAS']}>
+                <DashboardSistemas />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="padron"
+            element={
+              <RoleRoute allowedRoles={['ELECTORAL']}>
+                <GestionPadron />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="frentes-candidatos"
+            element={
+              <RoleRoute allowedRoles={['ELECTORAL']}>
+                <GestionFrentesCandidatos />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="configuracion-papeleta"
+            element={
+              <RoleRoute allowedRoles={['ELECTORAL']}>
+                <ConfiguracionPapeleta />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="gestion-eleccion"
+            element={
+              <RoleRoute allowedRoles={['ELECTORAL']}>
+                <GestionElecciones />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="auditoria-resultados"
+            element={
+              <RoleRoute allowedRoles={['ELECTORAL']}>
+                <ResultadosAuditoria />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="estadisticas-vivo"
+            element={
+              <RoleRoute allowedRoles={['ELECTORAL']}>
+                <EstadisticasEnVivo />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="admins"
+            element={
+              <RoleRoute allowedRoles={['SISTEMAS']}>
+                <GestionAdministradores />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="configuracion"
+            element={
+              <RoleRoute allowedRoles={['SISTEMAS']}>
+                <ConfiguracionSistema />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="nodos"
+            element={
+              <RoleRoute allowedRoles={['SISTEMAS']}>
+                <MonitoreoNodos />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="auditoria"
+            element={
+              <RoleRoute allowedRoles={['SISTEMAS']}>
+                <AuditoriaBlockchain />
+              </RoleRoute>
+            }
+          />
         </Route>
       </Route>
 

@@ -88,7 +88,7 @@ export class AuthService {
   /**
    * Inicia sesión de administrador (Corte Electoral).
    * @param loginAdminDto Datos de inicio de sesión.
-   * @returns Token JWT con rol ADMIN.
+  * @returns Token JWT con rol del administrador.
    * @throws UnauthorizedException si las credenciales no son válidas.
    */
   async loginAdministrador(loginAdminDto: LoginAdminDto): Promise<ApiResponse<AuthResponse>> {
@@ -109,7 +109,7 @@ export class AuthService {
 
       const payload: JwtPayload = {
         sub: administrador.id,
-        role: 'ADMIN',
+        role: administrador.rol,
         correo: administrador.correo,
       };
 

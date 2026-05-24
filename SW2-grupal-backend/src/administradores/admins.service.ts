@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Administrador, RolAdministrador } from 'src/administradores/entities/administrador.entity';
 import { ActualizarPerfilAdminDto } from './dto/actualizar-perfil.dto';
 import { CambiarPasswordAdminDto } from './dto/cambiar-password.dto';
+import { CrearAdministradorDto } from './dto/crear-administrador.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -59,6 +60,32 @@ export class AdminsService {
     });
 
     return await this.administradorRepository.save(administrador);
+  }
+
+  /**
+   * Crea un administrador desde el DTO, validando correo y hasheando password.
+   */
+  async crearAdministradorDesdeDto(dto: CrearAdministradorDto): Promise<Omit<Administrador, 'password'>> {
+    const existe = await this.buscarAdministradorPorCorreo(dto.correo);
+    if (existe) {
+      throw new ConflictException('El correo electrónico ya está en uso por otro administrador.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const admin = await this.crearAdministrador(dto.nombre, dto.apellido, dto.correo, passwordHash, dto.rol);
+    
+    const { password, ...perfil } = admin;
+    return perfil;
+  }
+
+  /**
+   * Corrige el rol de un administrador existente.
+   * Usado por el seed para reparar el administrador por defecto si fue creado con rol incorrecto.
+   * @param id UUID del administrador.
+   * @param rol Rol correcto a asignar.
+   */
+  async corregirRolAdministrador(id: string, rol: RolAdministrador): Promise<void> {
+    await this.administradorRepository.update({ id }, { rol });
   }
 
   /**

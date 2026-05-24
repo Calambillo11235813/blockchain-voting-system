@@ -57,7 +57,7 @@ El sistema es una **infraestructura tecnológica privada y soberana** para la Co
 
 | Actor | Casos de Uso Asociados |
 |-------|------------------------|
-| **Administrador de Sistemas** | CU-01 (Gestionar cuentas administrativas), CU-02 (Configurar parámetros del sistema), CU-03 (Desplegar Smart Contracts), CU-04 (Administrar nodos de la red), CU-20 (Auditar integridad de la red) |
+| **Administrador de Sistemas** || CU-01 (Gestionar cuentas administrativas), CU-02 (Configurar parámetros del sistema), CU-03 (Desplegar Smart Contracts), CU-04 (Administrar nodos de la red), CU-20 (Auditar integridad de la red)
 | **Administrador Electoral** | CU-05 (Gestionar padrón electoral), CU-06 (Registrar candidaturas y frentes), CU-07 (Controlar jornada electoral), CU-15 (Monitorear participación en tiempo real), CU-16 (Visualizar estadísticas estudiantiles), CU-17 (Visualizar estadísticas docentes), CU-18 (Generar reporte de consolidación paritaria) |
 | **Elector** | CU-08 (Autenticar usuario institucional), CU-09 (Controlar sesión única), CU-10 (Validar biometría facial), CU-11 (Extraer datos mediante OCR), CU-12 (Emitir voto digital), CU-13 (Registrar voto en Blockchain), CU-14 (Generar Hash de verificación), CU-19 (Descargar certificado de sufragio) |
 | **Auditor** | CU-15 (Monitorear participación en tiempo real), CU-16 (Visualizar estadísticas estudiantiles), CU-17 (Visualizar estadísticas docentes), CU-20 (Auditar integridad de la red) |
