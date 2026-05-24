@@ -16,6 +16,9 @@ export const envConfig = () => ({
   hardhat_microservice_url: process.env.HARDHAT_MICROSERVICE_URL,
   blockchain_url: process.env.BLOCKCHAIN_URL,
   wallet_private_key: process.env.WALLET_PRIVATE_KEY,
+  voting_wallet_private_key: process.env.VOTING_WALLET_PRIVATE_KEY,
+  // CU-04: lista de nodos RPC separada por coma
+  nodos_rpc_urls: process.env.NODOS_RPC_URLS || 'http://127.0.0.1:8545',
   // pinata_api_key: process.env.PINATA_API_KEY,
   // pinata_api_secret: process.env.PINATA_API_SECRET,
   // cloudinary/aws removed

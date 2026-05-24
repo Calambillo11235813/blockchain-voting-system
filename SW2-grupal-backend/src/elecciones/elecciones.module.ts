@@ -10,6 +10,7 @@ import { Candidato } from './entities/candidato.entity';
 import { PadronElectoral } from './entities/padron-electoral.entity';
 import { RegistroSufragio } from './entities/registro-sufragio.entity';
 import { Elector } from '../electores/entities/elector.entity';
+import { ParametroSistema } from './entities/parametro-sistema.entity';
 
 // ─── Servicios Legacy (código funcional preservado) ───────────────────────────
 import { EleccionesLegacyService } from './services/elecciones.service';
@@ -22,6 +23,9 @@ import { PapeletaService } from './services/papeleta.service';
 import { PadronService } from './services/padron.service';
 import { JornadaService } from './services/jornada.service';
 import { EscrutinioService } from './services/escrutinio.service';
+import { CertificadoService } from './services/certificado.service';
+import { EstadisticasService } from './services/estadisticas.service';
+import { ConfiguracionService } from './services/configuracion.service';
 
 // ─── Controladores ───────────────────────────────────────────────────────────
 import { EleccionesController } from './controllers/elecciones.controller';
@@ -29,6 +33,11 @@ import { CargoController } from './controllers/cargo.controller';
 import { FrenteController } from './controllers/frente.controller';
 import { CandidatoController } from './controllers/candidato.controller';
 import { PapeletaController } from './controllers/papeleta.controller';
+import { CertificadoController } from './controllers/certificado.controller';
+import { EstadisticasController } from './controllers/estadisticas.controller';
+import { ConfiguracionController } from './controllers/configuracion.controller';
+import { BlockchainModule } from 'src/blockchain/blockchain.module';
+import { VotoService } from './services/voto.service';
 
 @Module({
   imports: [
@@ -41,9 +50,11 @@ import { PapeletaController } from './controllers/papeleta.controller';
       Candidato,
       PadronElectoral,
       RegistroSufragio, // Requerido por PadronService para la validación de doble voto (RF6)
+      ParametroSistema,
       // Entidad externa necesaria para PadronService
       Elector,
     ]),
+    BlockchainModule,
   ],
   controllers: [
     EleccionesController,
@@ -51,6 +62,9 @@ import { PapeletaController } from './controllers/papeleta.controller';
     FrenteController,
     CandidatoController,
     PapeletaController,
+    CertificadoController,
+    EstadisticasController,
+    ConfiguracionController,
   ],
   providers: [
     // Legacy (preservado)
@@ -63,6 +77,10 @@ import { PapeletaController } from './controllers/papeleta.controller';
     PadronService,
     JornadaService,
     EscrutinioService,
+    VotoService,
+    CertificadoService,
+    EstadisticasService,
+    ConfiguracionService,
   ],
   exports: [
     // Legacy — consumido por AuthModule y guards existentes
@@ -71,6 +89,9 @@ import { PapeletaController } from './controllers/papeleta.controller';
     PadronService,
     JornadaService,
     EscrutinioService,
+    CertificadoService,
+    EstadisticasService,
+    ConfiguracionService,
   ],
 })
 export class EleccionesModule {}

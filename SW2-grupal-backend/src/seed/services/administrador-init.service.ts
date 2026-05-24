@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AdminsService } from 'src/administradores/admins.service';
+import { RolAdministrador } from 'src/administradores/entities/administrador.entity';
 
 @Injectable()
 export class AdministradorInitService implements OnApplicationBootstrap {
@@ -34,8 +35,8 @@ export class AdministradorInitService implements OnApplicationBootstrap {
       const passwordPlano = 'Admin123!';
       const passwordHash = await bcrypt.hash(passwordPlano, 10);
 
-      await this.adminsService.crearAdministrador(nombre, apellido, correo, passwordHash);
-      this.logger.log('Administrador por defecto creado');
+      await this.adminsService.crearAdministrador(nombre, apellido, correo, passwordHash, RolAdministrador.SISTEMAS);
+      this.logger.log('Administrador por defecto creado con rol SISTEMAS');
     } catch (error) {
       this.logger.error('No se pudo crear el administrador por defecto', error instanceof Error ? error.stack : undefined);
     }

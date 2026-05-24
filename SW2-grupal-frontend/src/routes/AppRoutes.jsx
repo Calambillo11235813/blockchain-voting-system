@@ -7,12 +7,18 @@ import VotingBallot from '../pages/VotingBallot'
 import AdminRoute from './AdminRoute'
 import StudentRoute from './StudentRoute'
 import AdminLayout from '../layouts/AdminLayout'
-import AdminOverview from '../pages/admin/AdminOverview'
-import AdminRegistry from '../pages/admin/AdminRegistry'
-import PartiesCandidates from '../pages/admin/PartiesCandidates'
-import BallotConfiguration from '../pages/admin/BallotConfiguration'
-import ElectionManagement from '../pages/admin/ElectionManagement'
-import AuditResults from '../pages/admin/AuditResults'
+import ResumenAdmin from '../pages/admin/compartido/ResumenAdmin'
+import GestionPadron from '../pages/admin/electoral/GestionPadron'
+import GestionFrentesCandidatos from '../pages/admin/electoral/GestionFrentesCandidatos'
+import ConfiguracionPapeleta from '../pages/admin/electoral/ConfiguracionPapeleta'
+import GestionElecciones from '../pages/admin/electoral/GestionElecciones'
+import ResultadosAuditoria from '../pages/admin/electoral/ResultadosAuditoria'
+import EstadisticasEnVivo from '../pages/admin/electoral/EstadisticasEnVivo'
+import GestionAdministradores from '../pages/admin/sistemas/GestionAdministradores'
+import ConfiguracionSistema from '../pages/admin/sistemas/ConfiguracionSistema'
+import MonitoreoNodos from '../pages/admin/sistemas/MonitoreoNodos'
+import AuditoriaBlockchain from '../pages/admin/sistemas/AuditoriaBlockchain'
+import VotoExitoso from '../pages/VotoExitoso'
 
 /**
  * Definición básica de rutas.
@@ -28,12 +34,17 @@ export default function AppRoutes() {
       <Route element={<AdminRoute />}>
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<AdminOverview />} />
-          <Route path="padron" element={<AdminRegistry />} />
-          <Route path="frentes-candidatos" element={<PartiesCandidates />} />
-          <Route path="configuracion-papeleta" element={<BallotConfiguration />} />
-          <Route path="gestion-eleccion" element={<ElectionManagement />} />
-          <Route path="auditoria-resultados" element={<AuditResults />} />
+          <Route path="dashboard" element={<ResumenAdmin />} />
+          <Route path="padron" element={<GestionPadron />} />
+          <Route path="frentes-candidatos" element={<GestionFrentesCandidatos />} />
+          <Route path="configuracion-papeleta" element={<ConfiguracionPapeleta />} />
+          <Route path="gestion-eleccion" element={<GestionElecciones />} />
+          <Route path="auditoria-resultados" element={<ResultadosAuditoria />} />
+          <Route path="estadisticas-vivo" element={<EstadisticasEnVivo />} />
+          <Route path="admins" element={<GestionAdministradores />} />
+          <Route path="configuracion" element={<ConfiguracionSistema />} />
+          <Route path="nodos" element={<MonitoreoNodos />} />
+          <Route path="auditoria" element={<AuditoriaBlockchain />} />
         </Route>
       </Route>
 
@@ -41,6 +52,7 @@ export default function AppRoutes() {
         <Route path="/estudiante/dashboard" element={<StudentDashboard />} />
         <Route path="/estudiante/biometria" element={<BiometriaCapture />} />
         <Route path="/estudiante/votacion" element={<VotingBallot />} />
+        <Route path="/estudiante/voto-exitoso" element={<VotoExitoso />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />

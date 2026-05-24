@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { fetchBallotComplete, fetchElections } from '../services/electionsService'
+import { emitirVoto } from '../services/votoService'
+import { useAuth } from '../context/AuthContext'
+import { decodeJwtPayload } from '../utils/jwt'
 
 /**
  * Pantalla de papeleta de votación para el estudiante (HU-003).
@@ -13,9 +17,12 @@ export default function VotingBallot() {
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedFrenteKey, setSelectedFrenteKey] = useState(null)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
-  const [voteSubmitted, setVoteSubmitted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [electionLabel, setElectionLabel] = useState('')
+  const [activeElectionId, setActiveElectionId] = useState(null)
+
+  const navigate = useNavigate()
+  const { token } = useAuth()
 
   // Carga la elección activa y su papeleta automáticamente
   useEffect(() => {
@@ -35,6 +42,7 @@ export default function VotingBallot() {
         }
 
         setElectionLabel(`${active.titulo} (${active.gestion})`)
+        setActiveElectionId(active.id)
         const data = await fetchBallotComplete(active.id)
         if (isMounted) setBallot(data)
       } catch {
@@ -110,43 +118,49 @@ export default function VotingBallot() {
   }
 
   async function handleVoteSubmit() {
-    setIsSubmitting(true)
-    // TODO: Conectar con Smart Contract / endpoint de emisión de voto
-    await new Promise((r) => setTimeout(r, 1500))
-    setIsSubmitting(false)
-    setShowConfirmModal(false)
-    setVoteSubmitted(true)
-  }
+    if (!selectedFrenteKey || !activeElectionId) return
 
-  // ─── Pantalla: Voto registrado ─────────────────────────────────────────────
-  if (voteSubmitted) {
-    return (
-      <main className="min-h-screen bg-white">
-        <header className="bg-blue-900">
-          <div className="mx-auto max-w-6xl px-4 py-6">
-            <h1 className="text-lg font-semibold text-white">Papeleta de Votación</h1>
-            <p className="mt-1 text-sm text-white/90">Su voto ha sido registrado exitosamente.</p>
-          </div>
-        </header>
+    try {
+      setIsSubmitting(true)
+      
+      const payload = decodeJwtPayload(token)
+      const electorId = payload?.sub
 
-        <div className="mx-auto max-w-lg px-4 py-16 text-center">
-          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-yellow-500 shadow-lg">
-            <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-blue-900">¡Voto Emitido Correctamente!</h2>
-          <p className="mt-3 text-sm text-slate-600">
-            Su voto ha sido registrado en el sistema. Gracias por participar en el proceso democrático.
-          </p>
-          <div className="mt-8 rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Frente elegido</p>
-            <p className="mt-1 text-xl font-bold text-blue-900">{selectedFrente?.nombreFrente}</p>
-            <p className="text-sm text-slate-600">Sigla: {selectedFrente?.sigla}</p>
-          </div>
-        </div>
-      </main>
-    )
+      if (!electorId) {
+        throw new Error('No se pudo identificar al elector. Por favor, inicie sesión nuevamente.')
+      }
+
+      // Obtener el candidato elegido del frente seleccionado. 
+      // Si la papeleta tiene varios cargos, en este prototipo asumimos que 
+      // votamos "en plancha" por el candidato principal (ej. Rector) 
+      // o que el backend espera el candidato. Asumiremos el primer candidato del frente.
+      const cargoPrincipalId = selectedFrente.cargoOrder[0]?.id
+      const cargoData = selectedFrente.cargos.get(cargoPrincipalId)
+      const candidatoId = cargoData?.candidatos?.[0]?.id
+
+      if (!candidatoId) {
+         throw new Error('No se encontró un candidato válido para este frente.')
+      }
+
+      const result = await emitirVoto(activeElectionId, electorId, candidatoId)
+      
+      setShowConfirmModal(false)
+      // Redirigir a la pantalla de éxito con el hash
+      navigate('/estudiante/voto-exitoso', { 
+        replace: true, 
+        state: { 
+          txHash: result?.hashTransaccion || result?.txHash,
+          eleccionId: activeElectionId
+        } 
+      })
+    } catch (error) {
+      console.error(error)
+      const errorMsg = error?.response?.data?.message || error?.message || 'Error al emitir el voto.'
+      setErrorMessage(errorMsg)
+      setShowConfirmModal(false)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // ─── Pantalla principal ────────────────────────────────────────────────────

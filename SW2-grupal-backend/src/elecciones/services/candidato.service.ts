@@ -6,6 +6,9 @@ import { Candidato } from 'src/elecciones/entities/candidato.entity';
 import { CrearCandidatoDto } from 'src/elecciones/dto/candidato/crear-candidato.dto';
 import { ActualizarCandidatoDto } from 'src/elecciones/dto/candidato/actualizar-candidato.dto';
 import { Frente } from 'src/elecciones/entities/frente.entity';
+import { BlockchainService } from 'src/blockchain/services/blockchain.service';
+
+
 
 /**
  * Servicio de aplicacion para el dominio de candidatos.
@@ -17,6 +20,7 @@ export class CandidatoService {
     private readonly candidatoRepository: Repository<Candidato>,
     @InjectRepository(Frente)
     private readonly frenteRepository: Repository<Frente>,
+    private readonly blockchainService: BlockchainService,
   ) {}
 
   /**
@@ -97,6 +101,8 @@ export class CandidatoService {
     await this.candidatoRepository.remove(candidato);
     return createApiResponse(HttpStatus.OK, null, 'Candidato eliminado correctamente.');
   }
+
+
 
   /**
    * Busca un frente por ID o lanza excepcion.

@@ -1,16 +1,18 @@
 import { Module } from '@nestjs/common';
-import { TicketValidatorContractService } from './services/ticket-validator-contract.service';
-import { HttpModule } from '@nestjs/axios';
-import { TicketValidatorContractController } from './controllers/ticket-validator-contract.controller';
-import { AuthModule } from 'src/autenticacion/auth.module';
+import { ConfigModule } from '@nestjs/config';
+import { BlockchainService } from './services/blockchain.service';
+import { NodosService } from './services/nodos.service';
+import { AuditoriaController } from './controllers/auditoria.controller';
+import { NodosController } from './controllers/nodos.controller';
 
 @Module({
-  controllers: [TicketValidatorContractController],
-  providers: [TicketValidatorContractService],
-  imports: [
-    HttpModule,
-    AuthModule,
-  ],
-  exports: [TicketValidatorContractService],
+  imports: [ConfigModule],
+  controllers: [AuditoriaController, NodosController],
+  providers: [BlockchainService, NodosService],
+  exports: [BlockchainService, NodosService],
 })
-export class BlockchainModule { }
+/**
+ * Modulo de integracion con blockchain.
+ * Incluye servicios de votacion (CU-13), nodos (CU-04) y auditoria (CU-20).
+ */
+export class BlockchainModule {}

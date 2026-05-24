@@ -9,6 +9,11 @@ const SIDEBAR_ITEMS = [
   { key: 'parties', label: 'Frente y Candidatos', to: '/admin/frentes-candidatos' },
   { key: 'ballot', label: 'Configuración de Papeleta', to: '/admin/configuracion-papeleta' },
   { key: 'audit', label: 'Auditoría y Resultados', to: '/admin/auditoria-resultados' },
+  { key: 'estadisticas', label: 'Estadísticas en Vivo', to: '/admin/estadisticas-vivo' },
+  { key: 'admins', label: 'Gestión de Admins', to: '/admin/admins', rolesRequeridos: ['SISTEMAS'] },
+  { key: 'configuracion', label: 'Configuración del Sistema', to: '/admin/configuracion', rolesRequeridos: ['SISTEMAS'] },
+  { key: 'nodos', label: 'Monitoreo de Nodos', to: '/admin/nodos', rolesRequeridos: ['SISTEMAS'] },
+  { key: 'auditoria', label: 'Auditoría Blockchain', to: '/admin/auditoria' },
 ]
 
 /**
@@ -148,9 +153,17 @@ export default function AdminLayout() {
  * @returns {import('react').JSX.Element}
  */
 function AdminSidebar() {
+  const { usuario } = useAuth()
+
+  // Filtrar items según los roles requeridos del usuario
+  const itemsVisibles = SIDEBAR_ITEMS.filter((item) => {
+    if (!item.rolesRequeridos) return true
+    return item.rolesRequeridos.includes(usuario?.rol)
+  })
+
   return (
     <nav className="space-y-1">
-      {SIDEBAR_ITEMS.map((item) => (
+      {itemsVisibles.map((item) => (
         <NavLink
           key={item.key}
           to={item.to}

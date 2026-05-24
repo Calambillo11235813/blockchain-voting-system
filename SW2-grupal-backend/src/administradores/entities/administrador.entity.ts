@@ -1,6 +1,11 @@
 import { Column, Entity, Index, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { Eleccion } from '../../elecciones/entities/eleccion.entity';
 
+export enum RolAdministrador {
+  SISTEMAS = 'SISTEMAS',
+  ELECTORAL = 'ELECTORAL',
+}
+
 /**
  * Entidad que representa a un administrador del sistema electoral universitario.
  * Un administrador puede gestionar múltiples elecciones a lo largo del tiempo.
@@ -26,6 +31,15 @@ export class Administrador {
   /** Contraseña hasheada con bcrypt. */
   @Column('text', { nullable: false })
   password: string;
+
+  /** Rol del administrador para control de permisos. */
+  @Column({
+    type: 'enum',
+    enum: RolAdministrador,
+    default: RolAdministrador.ELECTORAL,
+    nullable: false,
+  })
+  rol: RolAdministrador;
 
   /** Elecciones que este administrador ha creado y gestiona. */
   @OneToMany(() => Eleccion, (eleccion) => eleccion.administrador)

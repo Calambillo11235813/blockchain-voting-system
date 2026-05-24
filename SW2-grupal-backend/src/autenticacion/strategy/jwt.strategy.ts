@@ -7,12 +7,15 @@ import { ConfigService } from '@nestjs/config';
 
 import { JwtPayload } from 'src/autenticacion/interfaces/jwt-payload.interface';
 import { Elector } from 'src/electores/entities/elector.entity';
+import { Administrador } from 'src/administradores/entities/administrador.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     @InjectRepository(Elector)
     private readonly electorRepository: Repository<Elector>,
+    @InjectRepository(Administrador)
+    private readonly administradorRepository: Repository<Administrador>,
     configService: ConfigService,
   ) {
     super({
@@ -21,7 +24,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload): Promise<Elector> {
+  async validate(payload: JwtPayload): Promise<Elector | Administrador> {
+    if (payload.role === 'ADMIN') {
+      const administrador = await this.administradorRepository.findOne({
+        where: { id: payload.sub },
+      });
+
+      if (!administrador) {
+        throw new UnauthorizedException('token not valid');
+      }
+
+      return administrador;
+    }
+
     const elector = await this.electorRepository.findOne({
       where: { id: payload.sub },
     });
