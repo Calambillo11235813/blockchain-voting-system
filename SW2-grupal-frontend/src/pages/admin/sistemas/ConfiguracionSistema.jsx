@@ -6,18 +6,52 @@ import {
   eliminarParametro,
 } from '../../../services/configuracionService'
 
+const PARAMETROS_SISTEMA = {
+  BYPASS_ELECTION_TIME: { label: "Omitir Horario Electoral", tipo: "boolean", descripcion: "Desactiva el reloj electoral. Permite emitir votos sin importar la hora o la letra del apellido." },
+  BYPASS_BIOMETRIA_FACE_MATCH: { label: "Omitir Reconocimiento Facial", tipo: "boolean", descripcion: "Desactiva la evaluación estricta de coincidencia facial al momento de verificar la identidad." },
+  BIOMETRIA_FACE_MATCH_ALLOW_RUNTIME_BYPASS: { label: "Permitir Salto de Biometría manual", tipo: "boolean", descripcion: "Habilita un botón en la interfaz para que el usuario pueda saltar la biometría en caso de fallos técnicos." },
+  BIOMETRIA_DEBUG: { label: "Modo Depuración Biométrica", tipo: "boolean", descripcion: "Muestra logs y datos adicionales durante el escaneo facial para diagnóstico de errores." },
+  BIOMETRIA_OCR_PROVIDER: { label: "Proveedor de IA para OCR", tipo: "select", opciones: ["gemini_then_local", "gemini", "local"], descripcion: "Define qué motor procesará la lectura del carnet de identidad." },
+  GEMINI_MODEL: { label: "Modelo de Gemini", tipo: "text", descripcion: "Versión exacta del modelo de inteligencia artificial de Google a utilizar (ej. gemini-2.5-flash)." },
+  GEMINI_TIMEOUT_MS: { label: "Tiempo de espera Gemini (ms)", tipo: "number", descripcion: "Tiempo máximo en milisegundos que el sistema esperará una respuesta de la IA antes de fallar." },
+  NODOS_RPC_URLS: { label: "Nodos Blockchain (RPC)", tipo: "text", descripcion: "URLs de los nodos de la red separadas por coma para el monitoreo de salud del sistema." }
+};
+
 export default function ConfiguracionSistema() {
   const [parametros, setParametros] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [editando, setEditando] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
-    clave: '',
-    valor: '',
-    tipo: 'STRING',
-    descripcion: '',
-  })
+  
+  // Extraemos la primera clave por defecto para inicializar el formulario
+  const [primeraClave] = Object.keys(PARAMETROS_SISTEMA);
+  
+  const getInitialFormState = (clave) => {
+    const meta = PARAMETROS_SISTEMA[clave];
+    // Map de tipos: text/select -> STRING, number -> NUMBER, boolean -> BOOLEAN
+    let backendType = 'STRING';
+    let defaultValue = '';
+    
+    if (meta.tipo === 'boolean') {
+      backendType = 'BOOLEAN';
+      defaultValue = false;
+    } else if (meta.tipo === 'number') {
+      backendType = 'NUMBER';
+      defaultValue = 0;
+    } else if (meta.tipo === 'select' && meta.opciones?.length > 0) {
+      defaultValue = meta.opciones[0];
+    }
+
+    return {
+      clave: clave,
+      valor: defaultValue,
+      tipo: backendType,
+      descripcion: meta.descripcion,
+    }
+  }
+
+  const [formData, setFormData] = useState(getInitialFormState(primeraClave))
 
   useEffect(() => {
     cargarParametros()
@@ -40,8 +74,17 @@ export default function ConfiguracionSistema() {
   const handleActualizar = async (parametro) => {
     try {
       setError(null)
+      
+      // Parsear el valor antes de enviar
+      let parsedValue = parametro.valor;
+      if (parametro.tipo === 'BOOLEAN') {
+        parsedValue = parsedValue === 'true' || parsedValue === true;
+      } else if (parametro.tipo === 'NUMBER') {
+        parsedValue = Number(parsedValue);
+      }
+
       await actualizarParametro(parametro.clave, {
-        valor: parametro.valor,
+        valor: parsedValue.toString(),
         descripcion: parametro.descripcion,
       })
       setEditando(null)
@@ -54,15 +97,26 @@ export default function ConfiguracionSistema() {
 
   const handleCrear = async (e) => {
     e.preventDefault()
-    if (!formData.clave || !formData.valor) {
+    if (!formData.clave || formData.valor === undefined || formData.valor === '') {
       setError('Por favor rellena los campos requeridos')
       return
     }
 
     try {
       setError(null)
-      await crearParametro(formData)
-      setFormData({ clave: '', valor: '', tipo: 'STRING', descripcion: '' })
+      let parsedValue = formData.valor;
+      if (formData.tipo === 'BOOLEAN') {
+        parsedValue = parsedValue === 'true' || parsedValue === true;
+      } else if (formData.tipo === 'NUMBER') {
+        parsedValue = Number(parsedValue);
+      }
+
+      await crearParametro({
+        ...formData,
+        valor: parsedValue.toString()
+      })
+      
+      setFormData(getInitialFormState(primeraClave))
       setShowForm(false)
       await cargarParametros()
     } catch (err) {
@@ -84,211 +138,263 @@ export default function ConfiguracionSistema() {
     }
   }
 
-  const renderValor = (parametro) => {
-    if (editando?.clave === parametro.clave) {
-      if (parametro.tipo === 'BOOLEAN') {
-        return (
-          <select
-            value={parametro.valor}
-            onChange={(e) =>
-              setEditando({ ...editando, valor: e.target.value === 'true' })
-            }
-            className="rounded border border-gray-300 px-2 py-1"
-          >
-            <option value="true">Activado</option>
-            <option value="false">Desactivado</option>
-          </select>
-        )
-      }
+  const handleClaveChange = (e) => {
+    const nuevaClave = e.target.value;
+    setFormData(getInitialFormState(nuevaClave));
+  }
+
+  // Helper para renderizar los campos dinámicos
+  const renderDynamicInput = (context, data, onChange) => {
+    const metaInfo = PARAMETROS_SISTEMA[data.clave];
+    if (!metaInfo) {
+      // Fallback a texto normal si no está en el diccionario
       return (
         <input
-          type={parametro.tipo === 'NUMBER' ? 'number' : 'text'}
-          value={parametro.valor}
-          onChange={(e) => setEditando({ ...editando, valor: e.target.value })}
-          className="w-full max-w-xs rounded border border-gray-300 px-2 py-1"
+          type={data.tipo === 'NUMBER' ? 'number' : 'text'}
+          value={data.valor}
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-[#0a3366] focus:outline-none"
         />
+      );
+    }
+
+    if (metaInfo.tipo === 'boolean') {
+      const isChecked = data.valor === true || data.valor === 'true';
+      return (
+        <label className="flex cursor-pointer border rounded items-center bg-gray-50 px-4 py-2 mt-1">
+          <div className="relative">
+            <input 
+              type="checkbox" 
+              className="sr-only" 
+              checked={isChecked}
+              onChange={(e) => onChange(e.target.checked)} 
+            />
+            <div className={`block h-8 w-14 rounded-full transition-colors ${isChecked ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+            <div className={`dot absolute left-1 top-1 h-6 w-6 rounded-full bg-white transition-transform ${isChecked ? 'translate-x-6' : ''}`}></div>
+          </div>
+          <div className="ml-3 font-medium text-gray-700">
+            {isChecked ? 'Activado' : 'Desactivado'}
+          </div>
+        </label>
+      );
+    }
+    
+    if (metaInfo.tipo === 'select') {
+      return (
+        <select
+          value={data.valor}
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-[#0a3366] focus:outline-none"
+        >
+          {metaInfo.opciones.map(opt => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
       )
     }
 
-    if (parametro.tipo === 'BOOLEAN') {
+    return (
+      <input
+        type={metaInfo.tipo === 'number' ? 'number' : 'text'}
+        value={data.valor}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-[#0a3366] focus:outline-none"
+      />
+    )
+  }
+
+  const renderValorVisual = (parametro) => {
+    const metaInfo = PARAMETROS_SISTEMA[parametro.clave];
+
+    if (editando?.clave === parametro.clave) {
+      return renderDynamicInput('edit', editando, (nuevoValor) => setEditando({ ...editando, valor: nuevoValor }));
+    }
+
+    const tipoInterpretado = metaInfo ? metaInfo.tipo : (parametro.tipo === 'BOOLEAN' ? 'boolean' : 'text');
+
+    if (tipoInterpretado === 'boolean') {
+      const isChecked = parametro.valor === true || parametro.valor === 'true';
       return (
         <span
           className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            parametro.valor === true || parametro.valor === 'true'
+            isChecked
               ? 'bg-green-100 text-green-800'
-              : 'bg-red-100 text-red-800'
+              : 'bg-gray-200 text-gray-600'
           }`}
         >
-          {parametro.valor === true || parametro.valor === 'true' ? 'Activado' : 'Desactivado'}
+          {isChecked ? 'Activado' : 'Desactivado'}
         </span>
       )
     }
 
-    return <span className="text-sm text-gray-900">{parametro.valor}</span>
+    return <span className="text-sm font-medium text-gray-900">{parametro.valor}</span>
   }
 
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Configuración del Sistema</h1>
+          <h1 className="text-3xl font-bold text-[#0a3366]">Configuración del Sistema</h1>
           <p className="mt-1 text-gray-600">
-            Gestionar parámetros dinámicos del sistema (CU-02)
+            Administración de parámetros operacionales
           </p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+          onClick={() => {
+            setShowForm(!showForm);
+            setFormData(getInitialFormState(primeraClave));
+          }}
+          className={`rounded-lg px-4 py-2 font-medium text-white transition-colors ${showForm ? 'bg-gray-500 hover:bg-gray-600' : 'bg-[#f2a900] hover:bg-yellow-600'}`}
         >
-          {showForm ? 'Cancelar' : '+ Nuevo Parámetro'}
+          {showForm ? 'Volver al listado' : 'Agregar Parámetro'}
         </button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800">
-          <p className="font-semibold">Error</p>
+        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-[#d32f2f]">
+          <p className="font-semibold">Error al procesar la solicitud</p>
           <p>{error}</p>
         </div>
       )}
 
       {showForm && (
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow">
-          <h2 className="mb-4 text-xl font-semibold text-gray-900">Crear Nuevo Parámetro</h2>
-          <form onSubmit={handleCrear} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Clave</label>
-                <input
-                  type="text"
-                  required
+          <h2 className="mb-4 text-xl font-semibold text-[#0a3366]">Nuevo Parámetro del Sistema</h2>
+          <form onSubmit={handleCrear} className="space-y-5">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">Parámetro a Configurar</label>
+                <select
                   value={formData.clave}
-                  onChange={(e) => setFormData({ ...formData, clave: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-                  placeholder="BYPASS_ELECTION_TIME"
+                  onChange={handleClaveChange}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-[#0a3366] focus:outline-none"
+                >
+                  {Object.entries(PARAMETROS_SISTEMA).map(([key, meta]) => (
+                    <option key={key} value={key}>{meta.label}</option>
+                  ))}
+                  {/* Si necesitamos agregar uno no listado manualmente */}
+                  {!PARAMETROS_SISTEMA[formData.clave] && (
+                    <option value={formData.clave}>{formData.clave} (Personalizado)</option>
+                  )}
+                </select>
+                
+                {/* Caja de Descripción Dinámica */}
+                {PARAMETROS_SISTEMA[formData.clave] && (
+                  <div className="mt-2 flex items-start gap-2 text-sm text-gray-500 bg-gray-50 p-3 rounded border">
+                    <span>ℹ️</span> 
+                    <p>{PARAMETROS_SISTEMA[formData.clave].descripcion}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Valor Asignado</label>
+              {renderDynamicInput('create', formData, (nuevoValor) => setFormData({ ...formData, valor: nuevoValor }))}
+            </div>
+
+            {/* Ocultamos descripción manual a menos que no esté en el diccionario */}
+            {!PARAMETROS_SISTEMA[formData.clave] && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Descripción Interna</label>
+                <textarea
+                  value={formData.descripcion}
+                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#0a3366] focus:outline-none"
+                  rows="2"
                 />
               </div>
+            )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Tipo</label>
-                <select
-                  value={formData.tipo}
-                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="STRING">String</option>
-                  <option value="BOOLEAN">Boolean</option>
-                  <option value="NUMBER">Number</option>
-                </select>
-              </div>
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                className="rounded-lg bg-[#0a3366] px-6 py-2 text-white hover:bg-blue-800 transition-colors font-medium shadow-md"
+              >
+                Guardar Configuración
+              </button>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Valor</label>
-              <input
-                type={formData.tipo === 'NUMBER' ? 'number' : 'text'}
-                required
-                value={formData.valor}
-                onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Descripción</label>
-              <textarea
-                value={formData.descripcion}
-                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-                rows="3"
-                placeholder="Descripción del parámetro..."
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700"
-            >
-              Crear Parámetro
-            </button>
           </form>
         </div>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-gray-600">Cargando parámetros...</p>
+          <p className="text-[#0a3366] font-medium">Sincronizando información...</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {parametros.length === 0 ? (
-            <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-600">
-              No hay parámetros configurados.
-            </div>
-          ) : (
-            parametros.map((param) => (
-              <div
-                key={param.clave}
-                className="rounded-lg border border-gray-200 bg-white p-6 shadow"
-              >
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500">Clave</p>
-                    <p className="mt-1 font-mono text-sm text-gray-900">{param.clave}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500">Valor</p>
-                    <div className="mt-1">{renderValor(param)}</div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500">Tipo</p>
-                    <p className="mt-1 text-sm text-gray-900">{param.tipo}</p>
-                  </div>
-                </div>
-
-                {param.descripcion && (
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase text-gray-500">Descripción</p>
-                    <p className="mt-1 text-sm text-gray-700">{param.descripcion}</p>
-                  </div>
-                )}
-
-                {editando?.clave === param.clave ? (
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => handleActualizar(editando)}
-                      className="rounded bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700"
-                    >
-                      Guardar
-                    </button>
-                    <button
-                      onClick={() => setEditando(null)}
-                      className="rounded bg-gray-400 px-4 py-2 text-sm text-white hover:bg-gray-500"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => setEditando(param)}
-                      className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleEliminar(param.clave)}
-                      className="rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                )}
+        !showForm && (
+          <div className="space-y-4">
+            {parametros.length === 0 ? (
+              <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-600">
+                No hay parámetros configurados o no se pudieron cargar.
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              parametros.map((param) => {
+                const meta = PARAMETROS_SISTEMA[param.clave];
+                return (
+                  <div
+                    key={param.clave}
+                    className={`rounded-xl border ${editando?.clave === param.clave ? 'border-[#0a3366] bg-blue-50/30' : 'border-gray-200 bg-white'} p-6 shadow-sm hover:shadow-md transition-shadow`}
+                  >
+                    <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
+                      
+                      {/* Lado izquierdo (Info) */}
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold text-[#0a3366]">{meta ? meta.label : param.clave}</h3>
+                        <p className="text-xs font-mono text-gray-400 mt-1 uppercase tracking-wide">{param.clave}</p>
+                        
+                        <div className="mt-3 text-sm text-gray-600">
+                          {meta ? meta.descripcion : param.descripcion}
+                        </div>
+                      </div>
+
+                      {/* Lado derecho (Control) */}
+                      <div className="md:w-64 flex flex-col md:items-end">
+                        <div className="w-full">
+                           <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Estado / Valor</p>
+                           {renderValorVisual(param)}
+                        </div>
+
+                        {editando?.clave === param.clave ? (
+                          <div className="mt-4 flex gap-2 justify-end w-full">
+                            <button
+                              onClick={() => setEditando(null)}
+                              className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => handleActualizar(editando)}
+                              className="rounded bg-[#0a3366] px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
+                            >
+                              Guardar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="mt-4 flex gap-2 justify-end w-full">
+                            <button
+                              onClick={() => setEditando(param)}
+                              className="rounded bg-[#f2a900] px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-600 transition-colors"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => handleEliminar(param.clave)}
+                              className="rounded border border-[#d32f2f] text-[#d32f2f] px-3 py-1.5 text-sm font-medium hover:bg-red-50 transition-colors"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        )
       )}
     </div>
   )

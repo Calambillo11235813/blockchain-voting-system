@@ -11,6 +11,17 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || DEFAULT_BASE_URL,
 })
 
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('auth.token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
 /**
  * Configura o limpia el token JWT en la instancia de Axios.
  *

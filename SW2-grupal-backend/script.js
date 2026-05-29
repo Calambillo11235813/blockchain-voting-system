@@ -1,0 +1,1 @@
+const { Client } = require('pg'); const client = new Client({ user: 'postgres', host: '127.0.0.1', database: 'Votaciones_Blockchain', password: 'nicolas123', port: 5432 }); client.connect().then(() => client.query('SELECT * FROM administradores')).then(res => { console.log(res.rows); client.end() }).catch(err => { console.error(err); client.end() });

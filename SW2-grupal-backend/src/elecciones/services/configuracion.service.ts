@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import NodeCache from 'node-cache';
@@ -97,6 +101,13 @@ export class ConfiguracionService {
   /**
    * Limpia toda la caché en memoria.
    */
+  async eliminarParametro(clave: string): Promise<void> {
+    const p = await this.parametroRepository.findOne({ where: { clave } });
+    if (!p) throw new NotFoundException('No existe');
+    await this.parametroRepository.remove(p);
+    this.cache.del(clave);
+  }
+
   recargarCache(): void {
     this.cache.flushAll();
   }
@@ -159,9 +170,7 @@ export class ConfiguracionService {
   /**
    * Infiere automáticamente el tipo de datos de un string para nuevos parámetros.
    */
-  private inferirTipo(
-    valor: string,
-  ): 'string' | 'number' | 'boolean' | 'json' {
+  private inferirTipo(valor: string): 'string' | 'number' | 'boolean' | 'json' {
     const valTrim = valor.trim();
 
     // 1. Detección de booleanos

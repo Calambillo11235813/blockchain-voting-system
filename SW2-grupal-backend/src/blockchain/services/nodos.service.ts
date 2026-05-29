@@ -17,8 +17,13 @@ export interface EstadoNodo {
 @Injectable()
 export class NodosService {
   private readonly logger = new Logger(NodosService.name);
+  private estadoNodos: any[] = [];
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    // Inicializar el estado de inmediato y luego hacer polling cada 10 segundos en segundo plano
+    this.actualizarEstadoNodos();
+    setInterval(() => this.actualizarEstadoNodos(), 10000);
+  }
 
   /**
    * Devuelve la lista de URLs de nodos configurados en NODOS_RPC_URLS.
@@ -34,9 +39,8 @@ export class NodosService {
   /**
    * Verifica la salud de un nodo RPC individual.
    * @param url URL del nodo RPC a verificar.
-   * @returns Estado del nodo con altura de bloque y latencia.
    */
-  async verificarSaludNodo(url: string): Promise<EstadoNodo> {
+  async verificarSaludNodo(url: string): Promise<any> {
     const inicio = Date.now();
     try {
       const provider = new ethers.JsonRpcProvider(url);
@@ -53,48 +57,45 @@ export class NodosService {
 
       return {
         url,
-        activo: true,
-        alturaBloque,
-        latenciaMs,
-        ultimaConexion: new Date().toISOString(),
+        estado: latenciaMs > 500 ? 'lento' : 'activo',
+        bloque_actual: alturaBloque,
+        latencia: latenciaMs,
+        ultima_verificacion: new Date().toLocaleString(),
       };
     } catch (error: unknown) {
       const mensaje = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Nodo ${url} no responde: ${mensaje}`);
       return {
         url,
-        activo: false,
-        alturaBloque: null,
-        latenciaMs: null,
-        ultimaConexion: null,
+        estado: 'inactivo',
+        bloque_actual: null,
+        latencia: null,
+        ultima_verificacion: new Date().toLocaleString(),
         error: mensaje,
       };
     }
   }
 
   /**
-   * Devuelve el estado de todos los nodos configurados en NODOS_RPC_URLS.
-   * Las verificaciones se realizan en paralelo para minimizar el tiempo de respuesta.
+   * Función interna que hace el ping a los nodos y actualiza el estado en memoria.
+   */
+  private async actualizarEstadoNodos(): Promise<void> {
+    const urls = this.obtenerUrlsNodos();
+    
+    // Si no es la primera vez, evitamos loguear siempre la lista completa para no ensuciar, 
+    // pero mantenemos los logs individuales dentro de verificarSaludNodo
+    const nodosActualizados = await Promise.all(urls.map((url) => this.verificarSaludNodo(url)));
+    
+    // Actualizamos la variable en memoria con el array de resultados
+    this.estadoNodos = nodosActualizados;
+  }
+
+  /**
+   * Endpoint llamado por el controlador (GET /admin/nodos/estado)
+   * Simplemente retorna el estado en memoria para que responda rápido al frontend.
    * @returns Lista de estados de cada nodo.
    */
-  async obtenerEstadoNodos(): Promise<{
-    totalNodos: number;
-    nodosActivos: number;
-    nodos: EstadoNodo[];
-    consultadoEn: string;
-  }> {
-    const urls = this.obtenerUrlsNodos();
-    this.logger.log(`Verificando ${urls.length} nodo(s): ${urls.join(', ')}`);
-
-    const nodos = await Promise.all(urls.map((url) => this.verificarSaludNodo(url)));
-
-    const nodosActivos = nodos.filter((n) => n.activo).length;
-
-    return {
-      totalNodos: nodos.length,
-      nodosActivos,
-      nodos,
-      consultadoEn: new Date().toISOString(),
-    };
+  async obtenerEstadoNodos(): Promise<any[]> {
+    return this.estadoNodos;
   }
 }

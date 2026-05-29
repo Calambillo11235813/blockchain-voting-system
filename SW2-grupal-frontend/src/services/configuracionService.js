@@ -37,7 +37,8 @@ export async function obtenerParametro(clave) {
  * @returns {Promise<Object>} Parámetro actualizado
  */
 export async function actualizarParametro(clave, datos) {
-  const response = await api.patch(`/admin/configuracion/${clave}`, datos)
+  // El backend utiliza PUT /admin/configuracion/:clave para crear/actualizar (upsert)
+  const response = await api.put(`/admin/configuracion/${clave}`, datos)
   return response?.data?.data || {}
 }
 
@@ -53,7 +54,9 @@ export async function actualizarParametro(clave, datos) {
  * @returns {Promise<Object>} Parámetro creado
  */
 export async function crearParametro(datos) {
-  const response = await api.post('/admin/configuracion', datos)
+  // El backend no tiene un POST /admin/configuracion, usa la misma lógica de UPSERT (PUT)
+  const { clave, ...restoDatos } = datos;
+  const response = await api.put(`/admin/configuracion/${clave}`, restoDatos)
   return response?.data?.data || {}
 }
 

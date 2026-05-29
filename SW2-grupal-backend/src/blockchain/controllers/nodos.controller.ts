@@ -27,11 +27,14 @@ export class NodosController {
   @Get('estado')
   @HttpCode(HttpStatus.OK)
   async obtenerEstadoNodos() {
-    const datos = await this.nodosService.obtenerEstadoNodos();
+    const nodos = await this.nodosService.obtenerEstadoNodos();
+    const activos = nodos.filter((n) => n.estado === 'activo' || n.estado === 'lento').length;
     return {
       success: true,
-      mensaje: `Se verificaron ${datos.totalNodos} nodo(s). Activos: ${datos.nodosActivos}.`,
-      datos,
+      mensaje: `Se verificaron ${nodos.length} nodo(s). Activos: ${activos}.`,
+      nodos,
+      datos: nodos,
+      data: nodos, // IMPORTANT: El frontend nodosService.js busca response?.data?.data
     };
   }
 
@@ -45,13 +48,13 @@ export class NodosController {
   @HttpCode(HttpStatus.OK)
   async verificarNodo(@Param('urlBase64') urlBase64: string) {
     const url = Buffer.from(urlBase64, 'base64').toString('utf-8');
-    const datos = await this.nodosService.verificarSaludNodo(url);
+    const nodo = await this.nodosService.verificarSaludNodo(url);
     return {
       success: true,
-      mensaje: datos.activo
-        ? `Nodo activo en bloque #${datos.alturaBloque}.`
-        : `Nodo inaccesible: ${datos.error}`,
-      datos,
+      mensaje: (nodo.estado === 'activo' || nodo.estado === 'lento')
+        ? `Nodo activo en bloque #${nodo.bloque_actual}.`
+        : `Nodo inaccesible: ${nodo.error}`,
+      datos: nodo,
     };
   }
 }
