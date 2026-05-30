@@ -111,6 +111,7 @@ export class BlockchainService implements OnModuleInit {
     hacia: string | null;
     valor: string;
     estado: 'confirmada' | 'pendiente' | 'no_encontrada';
+    datosDecodificados?: any;
   }> {
     const provider = this.getProvider();
 
@@ -129,6 +130,28 @@ export class BlockchainService implements OnModuleInit {
       confirmaciones = currentBlock - tx.blockNumber + 1;
     }
 
+    let datosDecodificados: any = { rawData: tx.data };
+    try {
+      const abi = (VotacionAbi as { abi?: any }).abi ?? VotacionAbi;
+      const iface = new ethers.Interface(abi as any);
+      const parsed = iface.parseTransaction({ data: tx.data, value: tx.value });
+      
+      if (parsed) {
+        datosDecodificados = {
+          metodo: parsed.name,
+          argumentos: parsed.args.map(a => typeof a === 'string' ? a : a.toString()),
+        };
+        // Si el metodo es 'votar', mapeamos los argumentos por conveniencia
+        if (parsed.name === 'votar') {
+          datosDecodificados.eleccionHash = typeof parsed.args[0] === 'string' ? parsed.args[0] : parsed.args[0].toString();
+          datosDecodificados.candidatoHash = typeof parsed.args[1] === 'string' ? parsed.args[1] : parsed.args[1].toString();
+          datosDecodificados.electorHash = typeof parsed.args[2] === 'string' ? parsed.args[2] : parsed.args[2].toString();
+        }
+      }
+    } catch (e) {
+      // Falla la decodificación, se mantiene rawData
+    }
+
     return {
       hash: tx.hash,
       bloque: tx.blockNumber ?? null,
@@ -138,6 +161,7 @@ export class BlockchainService implements OnModuleInit {
       hacia: tx.to,
       valor: ethers.formatEther(tx.value),
       estado: tx.blockNumber !== null ? 'confirmada' : 'pendiente',
+      datosDecodificados
     };
   }
 

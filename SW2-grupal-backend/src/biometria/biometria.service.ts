@@ -38,9 +38,11 @@ export class BiometriaService {
     String(process.env.BIOMETRIA_FACE_MATCH_ALLOW_RUNTIME_BYPASS || '').toLowerCase() === 'true' ||
     process.env.NODE_ENV !== 'production';
 
-  // Interruptor maestro solicitado por el usuario para deshabilitar temporalmente la biometría
+  // Interruptores maestros solicitados por el usuario para deshabilitar temporalmente la biometría
   private readonly bypassBiometriaMaestro =
     String(process.env.BYPASS_BIOMETRIA_FACE_MATCH || '').toLowerCase() === 'true';
+  private readonly bypassOcrMaestro =
+    String(process.env.BYPASS_BIOMETRIA_OCR || '').toLowerCase() === 'true';
 
   constructor(
     private readonly electoresService: ElectoresService,
@@ -54,11 +56,12 @@ export class BiometriaService {
    * Paso 3 (Face Match): compara selfie con la foto del carnet.
    *
    * @param archivos Imagenes (frontal, trasera, selfie) ya validadas.
+   * @param reqUser Usuario logueado.
    * @returns Resultado de la validacion.
    * @throws BadRequestException si los datos no coinciden con el padron.
    * @throws NotImplementedException mientras OCR/Face Match no esten implementados.
    */
-  async validarIdentidad(archivos: ArchivosBiometriaValidados): Promise<ResultadoValidacionIdentidad> {
+  async validarIdentidad(archivos: ArchivosBiometriaValidados, reqUser?: any): Promise<ResultadoValidacionIdentidad> {
     const traceId = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
     try {
@@ -66,54 +69,64 @@ export class BiometriaService {
         frontal: this.resumenArchivo(archivos.frontal),
         trasera: this.resumenArchivo(archivos.trasera),
         selfie: this.resumenArchivo(archivos.selfie),
+        bypassOcr: this.bypassOcrMaestro
       });
 
-      const datosCarnet = await this.extraerDatosDesdeCarnet(archivos, traceId);
-      this.logDebug(traceId, 'Datos extraidos desde OCR', {
-        ci: datosCarnet.ci,
-        candidatosCi: datosCarnet.candidatosCi,
-        nombres: datosCarnet.nombres,
-        apellidos: datosCarnet.apellidos,
-      });
-
-      const candidatosCi = this.normalizarCandidatosCi([
-        datosCarnet.ci,
-        ...(datosCarnet.candidatosCi || []),
-      ]);
-
-      this.logDebug(traceId, 'Candidatos CI antes de buscar en padron', {
-        candidatosCi,
-      });
-
-      let ciSeleccionado = datosCarnet.ci;
+      let datosCarnet = { ci: '', nombres: '', apellidos: '', candidatosCi: [] };
+      let ciSeleccionado = '';
       let elector: Elector | null = null;
-      for (const candidato of candidatosCi) {
-        const candidatoNormalizado = String(candidato || '').trim();
-        if (!candidatoNormalizado || this.pareceFecha(candidatoNormalizado)) {
-          continue;
+
+      if (this.bypassOcrMaestro && reqUser) {
+        this.logDebug(traceId, 'Bypass Mastro de OCR activado. Omitiendo extracción con Gemini/Tesseract y validación de nombres.');
+        ciSeleccionado = reqUser.ci;
+        elector = reqUser as Elector;
+      } else {
+        datosCarnet = await this.extraerDatosDesdeCarnet(archivos, traceId);
+        this.logDebug(traceId, 'Datos extraidos desde OCR', {
+          ci: datosCarnet.ci,
+          candidatosCi: datosCarnet.candidatosCi,
+          nombres: datosCarnet.nombres,
+          apellidos: datosCarnet.apellidos,
+        });
+
+        const candidatosCi = this.normalizarCandidatosCi([
+          datosCarnet.ci,
+          ...(datosCarnet.candidatosCi || []),
+        ]);
+
+        this.logDebug(traceId, 'Candidatos CI antes de buscar en padron', {
+          candidatosCi,
+        });
+
+        ciSeleccionado = datosCarnet.ci;
+        for (const candidato of candidatosCi) {
+          const candidatoNormalizado = String(candidato || '').trim();
+          if (!candidatoNormalizado || this.pareceFecha(candidatoNormalizado)) {
+            continue;
+          }
+
+          const encontrado = await this.electoresService.buscarPorCi(candidatoNormalizado);
+          if (encontrado) {
+            ciSeleccionado = candidatoNormalizado;
+            elector = encontrado;
+            break;
+          }
         }
 
-        const encontrado = await this.electoresService.buscarPorCi(candidatoNormalizado);
-        if (encontrado) {
-          ciSeleccionado = candidatoNormalizado;
-          elector = encontrado;
-          break;
+        if (!elector) {
+          throw new BadRequestException('El numero de carnet no existe en el padron.');
         }
-      }
 
-      if (!elector) {
-        throw new BadRequestException('El numero de carnet no existe en el padron.');
-      }
+        this.logDebug(traceId, 'CI seleccionado por padron', {
+          ciSeleccionado,
+        });
 
-      this.logDebug(traceId, 'CI seleccionado por padron', {
-        ciSeleccionado,
-      });
+        const coincideNombres = this.camposCoincidenConTolerancia(elector.nombre, datosCarnet.nombres);
+        const coincideApellidos = this.camposCoincidenConTolerancia(elector.apellido, datosCarnet.apellidos);
 
-      const coincideNombres = this.camposCoincidenConTolerancia(elector.nombre, datosCarnet.nombres);
-      const coincideApellidos = this.camposCoincidenConTolerancia(elector.apellido, datosCarnet.apellidos);
-
-      if (!coincideNombres || !coincideApellidos) {
-        throw new BadRequestException('Los datos del carnet no coinciden con el padron.');
+        if (!coincideNombres || !coincideApellidos) {
+          throw new BadRequestException('Los datos del carnet no coinciden con el padron.');
+        }
       }
 
       if (this.bypassBiometriaMaestro) {

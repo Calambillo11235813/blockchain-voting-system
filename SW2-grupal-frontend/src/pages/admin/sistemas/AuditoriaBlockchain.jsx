@@ -53,8 +53,10 @@ export default function AuditoriaBlockchain() {
           <p className="text-xs font-semibold uppercase text-gray-500">Estado</p>
           <span
             className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold ${
-              datos.estado === 'exitosa'
+              datos.estado === 'confirmada' || datos.estado === 'exitosa'
                 ? 'bg-green-100 text-green-800'
+                : datos.estado === 'pendiente' 
+                ? 'bg-yellow-100 text-yellow-800'
                 : 'bg-red-100 text-red-800'
             }`}
           >
@@ -77,13 +79,13 @@ export default function AuditoriaBlockchain() {
         <div className="rounded-lg border border-gray-200 p-4">
           <p className="text-xs font-semibold uppercase text-gray-500">Timestamp</p>
           <p className="mt-2 text-sm text-gray-900">
-            {new Date(datos.timestamp).toLocaleString()}
+            {datos.timestamp ? new Date(datos.timestamp * 1000).toLocaleString() : 'Pendiente'}
           </p>
         </div>
 
         <div className="rounded-lg border border-gray-200 p-4">
-          <p className="text-xs font-semibold uppercase text-gray-500">Gas Total</p>
-          <p className="mt-2 font-mono text-sm text-gray-900">{datos.gastatotal}</p>
+          <p className="text-xs font-semibold uppercase text-gray-500">Valor (ETH)</p>
+          <p className="mt-2 font-mono text-sm text-gray-900">{datos.valor || '0.0'}</p>
         </div>
       </div>
 
@@ -98,8 +100,29 @@ export default function AuditoriaBlockchain() {
       </div>
 
       <div className="rounded-lg border border-gray-200 p-4">
-        <p className="text-xs font-semibold uppercase text-gray-500">Entrada</p>
-        <p className="mt-2 break-all font-mono text-xs text-gray-900">{datos.entrada}</p>
+        <p className="text-xs font-semibold uppercase text-gray-500">Datos de Entrada (Decodificados)</p>
+        {datos.datosDecodificados?.metodo ? (
+          <div className="mt-2 space-y-2">
+            <p className="text-sm font-semibold text-blue-800">Método: <span className="font-mono">{datos.datosDecodificados.metodo}</span></p>
+            {datos.datosDecodificados.eleccionHash && (
+              <div className="text-xs text-gray-700 font-mono bg-gray-50 p-3 rounded">
+                <p><strong className="text-gray-900">Elección Hash:</strong> {datos.datosDecodificados.eleccionHash}</p>
+                <p className="mt-1"><strong className="text-gray-900">Candidato Hash:</strong> {datos.datosDecodificados.candidatoHash}</p>
+                <p className="mt-1"><strong className="text-gray-900">Elector Hash:</strong> {datos.datosDecodificados.electorHash}</p>
+              </div>
+            )}
+            <details className="mt-2">
+              <summary className="text-xs cursor-pointer text-gray-500 hover:text-gray-700">Ver Payload Original (Raw Data)</summary>
+              <p className="mt-2 break-all font-mono text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                {datos.datosDecodificados.rawData}
+              </p>
+            </details>
+          </div>
+        ) : (
+          <p className="mt-2 break-all font-mono text-xs text-gray-900">
+            {datos.datosDecodificados?.rawData || datos.entrada || 'No disponible'}
+          </p>
+        )}
       </div>
     </div>
   )
@@ -132,7 +155,7 @@ export default function AuditoriaBlockchain() {
         <div className="rounded-lg border border-gray-200 p-4">
           <p className="text-xs font-semibold uppercase text-gray-500">Timestamp</p>
           <p className="mt-2 text-sm text-gray-900">
-            {new Date(datos.timestamp).toLocaleString()}
+            {datos.timestamp ? new Date(datos.timestamp * 1000).toLocaleString() : 'N/A'}
           </p>
         </div>
 

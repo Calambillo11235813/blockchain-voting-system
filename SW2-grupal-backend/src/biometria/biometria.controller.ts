@@ -1,5 +1,6 @@
-import { Controller, HttpStatus, Post, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { Controller, HttpStatus, Post, UploadedFiles, UseInterceptors, UseGuards, Req } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiResponse, createApiResponse } from 'src/compartido/respuesta';
 import { BiometriaService, ResultadoValidacionIdentidad } from './biometria.service';
 import { ArchivosBiometria, crearOpcionesMulterBiometria, ValidarIdentidadArchivosDto } from './dto/validar-identidad-archivos.dto';
@@ -18,6 +19,7 @@ export class BiometriaController {
    * @returns Resultado de validacion.
    */
   @Post('verificar')
+  @UseGuards(AuthGuard('jwt'))
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -30,9 +32,10 @@ export class BiometriaController {
   )
   async verificar(
     @UploadedFiles() files: ArchivosBiometria,
+    @Req() req: any,
   ): Promise<ApiResponse<ResultadoValidacionIdentidad>> {
     const archivosValidados = ValidarIdentidadArchivosDto.validar(files);
-    const resultado = await this.biometriaService.validarIdentidad(archivosValidados);
+    const resultado = await this.biometriaService.validarIdentidad(archivosValidados, req.user);
 
     return createApiResponse(
       HttpStatus.OK,

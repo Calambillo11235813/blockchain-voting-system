@@ -27,7 +27,7 @@ import { api } from './api'
  */
 export async function obtenerDetallesTransaccion(hash) {
   const response = await api.get(`/auditoria/transaccion/${hash}`)
-  return response?.data?.data || {}
+  return response?.data?.datos || {}
 }
 
 /**
@@ -52,7 +52,7 @@ export async function obtenerDetallesTransaccion(hash) {
  */
 export async function obtenerDetallesBloque(numero) {
   const response = await api.get(`/auditoria/bloque/${numero}`)
-  return response?.data?.data || {}
+  return response?.data?.datos || {}
 }
 
 /**
