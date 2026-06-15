@@ -415,22 +415,10 @@ export class PadronService {
       );
     }
 
-    // ── Validación 4: Doble voto ──────────────────────────────────────────
-    // Garantiza que el elector no haya emitido su sufragio previamente.
-    // La restricción de unicidad (eleccion, elector) en RegistroSufragio
-    // también protege a nivel de BD, pero este chequeo da un mensaje claro.
-    const yaVoto = await this.registroSufragioRepository.findOne({
-      where: {
-        eleccion: { id: eleccionId },
-        elector: { id: elector.id },
-      },
-    });
-
-    if (yaVoto) {
-      throw new ForbiddenException(
-        `El elector con registro '${registro}' ya ejerció su voto en esta elección.`,
-      );
-    }
+    // ── Validación 4: Doble voto (Removido) ────────────────────────────────
+    // Ya no bloqueamos el login si el elector ya votó, para permitir que 
+    // el frontend lo redirija al panel de estadísticas y descarga de certificado.
+    // La protección contra doble voto se mantiene firmemente en voto.service.ts.
 
     // ── Acceso concedido ─────────────────────────────────────────────────
     return createApiResponse(

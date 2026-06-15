@@ -73,6 +73,22 @@ export default function Login() {
         } else {
           nextPath = '/admin/dashboard'
         }
+      } else {
+        // Verificar si el elector ya votó en la elección activa
+        try {
+          const { fetchElections } = await import('../services/electionsService')
+          const { verificarEstadoVoto } = await import('../services/certificadoService')
+          const elections = await fetchElections()
+          const active = elections.find((e) => e.estaActiva)
+          if (active) {
+            const estadoVoto = await verificarEstadoVoto(active.id)
+            if (estadoVoto.haVotado) {
+              nextPath = '/estudiante/votacion' // Ahora muestra el Dashboard Post-Voto
+            }
+          }
+        } catch (err) {
+          console.error('Error verificando estado del voto al iniciar sesión', err)
+        }
       }
       navigate(nextPath, { replace: true })
     } catch (error) {

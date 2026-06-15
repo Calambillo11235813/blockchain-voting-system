@@ -39,6 +39,7 @@ export class CertificadoService {
     // 2. Validar que la jornada esté cerrada o permitir si está activa bajo bypass
     const bypass = process.env.BYPASS_ELECTION_TIME === 'true';
     if (eleccion.estaActiva && !bypass) {
+      console.log('CertificadoService: ForbiddenException -> La jornada electoral sigue activa.');
       throw new ForbiddenException('La jornada electoral sigue activa. El certificado estará disponible una vez cerrada la jornada.');
     }
 
@@ -393,5 +394,21 @@ export class CertificadoService {
     // 6. Guardar y retornar el PDF como Buffer
     const pdfBytes = await pdfDoc.save();
     return Buffer.from(pdfBytes);
+  }
+
+  /**
+   * Verifica si un elector ya ha emitido su voto en una elección específica.
+   */
+  async verificarSiVoto(eleccionId: string, electorId: string): Promise<{ haVotado: boolean; txHash?: string }> {
+    const registro = await this.registroSufragioRepository.findOne({
+      where: {
+        eleccion: { id: eleccionId },
+        elector: { id: electorId },
+      },
+    });
+    return {
+      haVotado: !!registro,
+      txHash: registro?.hashTransaccion,
+    };
   }
 }

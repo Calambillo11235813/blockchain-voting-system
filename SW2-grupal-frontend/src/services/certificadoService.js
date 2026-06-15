@@ -1,6 +1,21 @@
 import { api } from './api'
 
 /**
+ * Verifica si el elector logueado ya ha emitido su voto en una elección específica.
+ * @param {string} eleccionId UUID de la elección.
+ * @returns {Promise<boolean>}
+ */
+export async function verificarEstadoVoto(eleccionId) {
+  try {
+    const response = await api.get(`/elecciones/certificado/estado/${eleccionId}`)
+    return response.data?.data || { haVotado: false }
+  } catch (error) {
+    console.error('Error al verificar estado de voto:', error)
+    return { haVotado: false }
+  }
+}
+
+/**
  * Descarga el certificado de sufragio de una elección.
  * 
  * @param {string} eleccionId UUID de la elección.

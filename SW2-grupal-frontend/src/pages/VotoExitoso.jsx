@@ -72,10 +72,19 @@ export default function VotoExitoso() {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Hash de Transacción (Comprobante Blockchain)
           </p>
-          <div className="mt-2 flex items-center justify-between rounded bg-white p-3 border border-slate-200">
-            <code className="text-xs font-mono text-blue-900 break-all">
+          <div className="mt-2 flex items-center gap-3 rounded bg-white p-3 border border-slate-200 relative">
+            <code className="flex-1 text-xs font-mono text-blue-900 break-all">
               {txHash}
             </code>
+            <button
+              onClick={() => navigator.clipboard.writeText(txHash)}
+              title="Copiar Hash"
+              className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
           </div>
           <p className="mt-2 text-xs text-slate-500">
             Guarde este hash para verificar que su voto fue registrado inmutablemente en la red.

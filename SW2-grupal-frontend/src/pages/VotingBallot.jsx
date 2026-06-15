@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchBallotComplete, fetchElections } from '../services/electionsService'
 import { emitirVoto } from '../services/votoService'
+import { verificarEstadoVoto, descargarCertificado } from '../services/certificadoService'
+import { getEstadisticasEstudiantes, getEstadisticasDocentes } from '../services/estadisticasService'
 import { useAuth } from '../context/AuthContext'
 import { decodeJwtPayload } from '../utils/jwt'
 
@@ -20,9 +22,14 @@ export default function VotingBallot() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [electionLabel, setElectionLabel] = useState('')
   const [activeElectionId, setActiveElectionId] = useState(null)
+  
+  const [haVotado, setHaVotado] = useState(false)
+  const [txHash, setTxHash] = useState(null)
+  const [estadisticas, setEstadisticas] = useState(null)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   const navigate = useNavigate()
-  const { token } = useAuth()
+  const { token, role } = useAuth()
 
   // Carga la elección activa y su papeleta automáticamente
   useEffect(() => {
@@ -43,8 +50,24 @@ export default function VotingBallot() {
 
         setElectionLabel(`${active.titulo} (${active.gestion})`)
         setActiveElectionId(active.id)
-        const data = await fetchBallotComplete(active.id)
-        if (isMounted) setBallot(data)
+        
+        const estadoVoto = await verificarEstadoVoto(active.id)
+        if (estadoVoto.haVotado) {
+          if (isMounted) {
+            setHaVotado(true)
+            setTxHash(estadoVoto.txHash)
+            const statsMethod = role === 'DOCENTE' ? getEstadisticasDocentes : getEstadisticasEstudiantes
+            try {
+              const statsData = await statsMethod(active.id)
+              setEstadisticas(statsData)
+            } catch (err) {
+              console.error('Error cargando estadísticas', err)
+            }
+          }
+        } else {
+          const data = await fetchBallotComplete(active.id)
+          if (isMounted) setBallot(data)
+        }
       } catch {
         if (isMounted) setErrorMessage('No se pudo cargar la papeleta. Inténtelo más tarde.')
       } finally {
@@ -163,6 +186,19 @@ export default function VotingBallot() {
     }
   }
 
+  async function handleDownloadCertificate() {
+    if (!activeElectionId) return
+    try {
+      setIsDownloading(true)
+      await descargarCertificado(activeElectionId)
+    } catch (err) {
+      console.error(err)
+      alert('Hubo un error al intentar descargar el certificado.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   // ─── Pantalla principal ────────────────────────────────────────────────────
   return (
     <main className="min-h-screen bg-white">
@@ -211,15 +247,109 @@ export default function VotingBallot() {
           </div>
         )}
 
+        {/* ── Dashboard Post-Votación ── */}
+        {!isLoading && haVotado && (
+          <div className="mx-auto max-w-2xl space-y-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-slate-900">¡Voto Registrado Exitosamente!</h2>
+              <p className="mt-2 text-slate-600">
+                Ya has participado en esta elección. Puedes descargar tu certificado oficial a continuación.
+              </p>
+              
+              <button
+                onClick={handleDownloadCertificate}
+                disabled={isDownloading}
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-yellow-500 px-6 py-3 font-bold text-white shadow-lg shadow-yellow-500/30 transition-all hover:bg-yellow-400 hover:shadow-yellow-400/40 active:scale-95 disabled:opacity-70"
+              >
+                {isDownloading ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    Generando PDF...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Descargar Certificado
+                  </>
+                )}
+              </button>
+            </div>
+
+            {estadisticas && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="mb-4 text-lg font-bold text-slate-900">
+                  Estadísticas en vivo - {role === 'DOCENTE' ? 'Docentes' : 'Estudiantes'}
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-500">Total Habilitados</p>
+                    <p className="mt-1 text-2xl font-black text-blue-900">{estadisticas.totalHabilitados}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-500">Votos Emitidos</p>
+                    <p className="mt-1 text-2xl font-black text-green-600">{estadisticas.totalVotosEmitidos}</p>
+                  </div>
+                </div>
+                
+                <div className="mt-6">
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span className="font-semibold text-slate-700">Participación del Estamento</span>
+                    <span className="font-bold text-blue-900">{estadisticas.porcentajeParticipacion}%</span>
+                  </div>
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100 mb-6">
+                    <div 
+                      className="h-full rounded-full bg-blue-600 transition-all duration-1000 ease-out"
+                      style={{ width: `${Math.min(100, Math.max(0, estadisticas.porcentajeParticipacion))}%` }}
+                    />
+                  </div>
+                  
+                  {txHash && (
+                    <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-5 relative group mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                        Comprobante de Sufragio (Blockchain)
+                      </p>
+                      <div className="flex flex-col sm:flex-row items-center gap-3 pr-10">
+                        <div className="flex-1 w-full bg-white rounded border border-slate-200 p-2 overflow-hidden relative">
+                          <code className="text-xs sm:text-sm font-mono text-blue-900 break-all block">
+                            {txHash}
+                          </code>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(txHash)
+                        }}
+                        title="Copiar Hash"
+                        className="absolute right-4 top-1/2 -translate-y-1/2 mt-3 flex items-center justify-center p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                      >
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Estado: sin datos */}
-        {!isLoading && !errorMessage && ballot && !ballotColumns.length && (
+        {!isLoading && !errorMessage && !haVotado && ballot && !ballotColumns.length && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-sm text-slate-700">La papeleta aún no tiene frentes registrados.</p>
           </div>
         )}
 
         {/* ── Papeleta ── */}
-        {!isLoading && !errorMessage && ballotColumns.length > 0 && (
+        {!isLoading && !errorMessage && !haVotado && ballotColumns.length > 0 && (
           <>
             {/* Instrucción */}
             <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
