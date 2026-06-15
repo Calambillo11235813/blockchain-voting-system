@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   UseGuards,
+  Res,
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/autenticacion/guards/jwt-auth.guard';
 import { EstadisticasService } from '../services/estadisticas.service';
@@ -13,6 +14,7 @@ import {
   EstadisticasEstamentoDetalle,
   EstadisticasParticipacion,
 } from '../services/estadisticas.service';
+import { EscrutinioService, ReporteConsolidacion } from '../services/escrutinio.service';
 
 /**
  * Controlador de Estadísticas Electorales.
@@ -29,7 +31,45 @@ import {
 @Controller('estadisticas')
 @UseGuards(JwtAuthGuard)
 export class EstadisticasController {
-  constructor(private readonly estadisticasService: EstadisticasService) {}
+  constructor(
+    private readonly estadisticasService: EstadisticasService,
+    private readonly escrutinioService: EscrutinioService
+  ) {}
+
+  /**
+   * CU-18: Generar reporte de consolidación paritaria.
+   *
+   * Devuelve el acta de consolidación con los resultados ponderados (50/50)
+   * del escrutinio y el frente ganador.
+   *
+   * @param eleccionId UUID de la elección a consultar.
+   * @returns ReporteConsolidacion con la información del escrutinio.
+   *
+   * @example GET /estadisticas/escrutinio/550e8400-e29b-41d4-a716-446655440000
+   */
+  @Get('escrutinio/:eleccionId')
+  async generarReporteConsolidacion(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<ReporteConsolidacion>> {
+    return this.escrutinioService.generarReporteConsolidacion(eleccionId);
+  }
+
+  /**
+   * Descarga el Acta de Consolidación Paritaria en formato PDF.
+   */
+  @Get('escrutinio/:eleccionId/pdf')
+  async descargarActaPDF(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+    @Res() res: any,
+  ) {
+    const pdfBuffer = await this.escrutinioService.generarActaPDF(eleccionId);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="acta_consolidacion_${eleccionId.slice(0,8)}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    res.end(pdfBuffer);
+  }
 
   /**
    * CU-15: Monitoreo de participación en tiempo real.

@@ -43,16 +43,30 @@ export class NodosService {
   async verificarSaludNodo(url: string): Promise<any> {
     const inicio = Date.now();
     try {
-      const provider = new ethers.JsonRpcProvider(url);
-      // Timeout de 5 segundos para no bloquear si el nodo está caído
-      const alturaBloque = await Promise.race([
-        provider.getBlockNumber(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout al conectar con el nodo')), 5000),
-        ),
-      ]) as number;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_blockNumber',
+          params: [],
+          id: 1,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
 
+      if (!response.ok) {
+        throw new Error(`Error HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error.message || 'Error RPC desconocido');
+      }
+
+      const alturaBloque = parseInt(data.result, 16);
       const latenciaMs = Date.now() - inicio;
+
       this.logger.log(`Nodo ${url} → bloque #${alturaBloque} (${latenciaMs}ms)`);
 
       return {

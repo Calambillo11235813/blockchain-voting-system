@@ -61,4 +61,13 @@ export class ElectoresService {
       where: { ci: normalized },
     });
   }
+
+  /**
+   * Cuenta el total de estudiantes registrados en el sistema.
+   */
+  async contarEstudiantes(): Promise<number> {
+    return this.electorRepository.count({
+      where: { estamento: 'ESTUDIANTE' as any },
+    });
+  }
 }

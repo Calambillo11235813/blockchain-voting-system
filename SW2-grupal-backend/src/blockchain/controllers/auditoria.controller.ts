@@ -10,6 +10,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SistemasGuard } from '../../administradores/guards/sistemas.guard';
 import { BlockchainService } from '../services/blockchain.service';
+import { DataSource } from 'typeorm';
 
 /**
  * Controlador de auditoría de integridad de la red blockchain (CU-20).
@@ -19,17 +20,39 @@ import { BlockchainService } from '../services/blockchain.service';
  *
  * Endpoints protegidos (solo rol SISTEMAS):
  *   GET /auditoria/bloque/:numero     → auditoría de bloques
+ *   GET /admin/auditoria/bitacora     → bitácora de transacciones
  */
-@Controller('auditoria')
+@Controller()
 export class AuditoriaController {
-  constructor(private readonly blockchainService: BlockchainService) {}
+  constructor(
+    private readonly blockchainService: BlockchainService,
+    private readonly dataSource: DataSource,
+  ) {}
+
+  /**
+   * Consulta la bitácora anónima de transacciones (votos).
+   * Solo retorna el ID, Hash y Timestamp.
+   */
+  @Get('admin/auditoria/bitacora')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(AuthGuard('jwt'), SistemasGuard)
+  async obtenerBitacora() {
+    const bitacora = await this.dataSource.query(
+      `SELECT id, "hashTransaccion" AS "txHash", "fechaSufragio" AS "fecha" FROM "registro_sufragio" ORDER BY "fechaSufragio" DESC LIMIT 100`
+    );
+    return {
+      success: true,
+      mensaje: 'Bitácora de transacciones.',
+      datos: bitacora,
+    };
+  }
 
   /**
    * Consulta los detalles de una transacción por su hash.
    * PÚBLICO: no requiere autenticación, cualquier elector puede verificar su voto.
    * @param hash Hash de la transacción en formato 0x...
    */
-  @Get('transaccion/:hash')
+  @Get('auditoria/transaccion/:hash')
   @HttpCode(HttpStatus.OK)
   async obtenerTransaccion(@Param('hash') hash: string) {
     const datos = await this.blockchainService.obtenerTransaccion(hash);
@@ -45,7 +68,7 @@ export class AuditoriaController {
    * PROTEGIDO: requiere JWT y rol SISTEMAS.
    * @param numero Número de bloque a consultar.
    */
-  @Get('bloque/:numero')
+  @Get('auditoria/bloque/:numero')
   @HttpCode(HttpStatus.OK)
   @UseGuards(AuthGuard('jwt'), SistemasGuard)
   async verificarBloque(@Param('numero', ParseIntPipe) numero: number) {

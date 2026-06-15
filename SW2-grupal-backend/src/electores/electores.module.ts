@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Elector } from './entities/elector.entity';
 import { ElectoresService } from './electores.service';
 import { ElectoresController } from './electores.controller';
+import { EstudiantesController } from './estudiantes.controller';
 
 /**
  * Módulo global de identidades electorales.
@@ -13,7 +14,7 @@ import { ElectoresController } from './electores.controller';
  */
 @Module({
   imports: [TypeOrmModule.forFeature([Elector])],
-  controllers: [ElectoresController],
+  controllers: [ElectoresController, EstudiantesController],
   providers: [ElectoresService],
   exports: [ElectoresService, TypeOrmModule],
 })

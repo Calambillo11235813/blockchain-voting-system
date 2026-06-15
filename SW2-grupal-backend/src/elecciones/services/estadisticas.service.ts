@@ -149,40 +149,41 @@ export class EstadisticasService {
     eleccionId: string,
     estamento: EstamentoEnum,
   ): Promise<{ carrera: string; habilitados: number; votos: number; porcentaje: number }[]> {
-    // Habilitados por carrera
-    const habRows: { carrera: string; total: string }[] = await this.padronRepository
+    // Habilitados por carrera — normalizar con LOWER(TRIM()) para fusionar variantes
+    const habRows: { carrera: string; carrera_norm: string; total: string }[] = await this.padronRepository
       .createQueryBuilder('padron')
       .innerJoin('padron.elector', 'elector')
       .where('padron.eleccion = :eleccionId', { eleccionId })
       .andWhere('padron.estaHabilitado = :hab', { hab: true })
       .andWhere('elector.estamento = :estamento', { estamento })
-      .select('elector.carrera', 'carrera')
+      .select('MIN(elector.carrera)', 'carrera')               // nombre display (el primero encontrado)
+      .addSelect('LOWER(TRIM(elector.carrera))', 'carrera_norm') // clave de agrupación normalizada
       .addSelect('COUNT(padron.id)', 'total')
-      .groupBy('elector.carrera')
-      .orderBy('elector.carrera', 'ASC')
+      .groupBy('LOWER(TRIM(elector.carrera))')
+      .orderBy('LOWER(TRIM(elector.carrera))', 'ASC')
       .getRawMany();
 
-    // Votos por carrera
-    const votosRows: { carrera: string; total: string }[] = await this.registroSufragioRepository
+    // Votos por carrera — misma normalización
+    const votosRows: { carrera_norm: string; total: string }[] = await this.registroSufragioRepository
       .createQueryBuilder('rs')
       .innerJoin('rs.elector', 'elector')
       .where('rs.eleccion = :eleccionId', { eleccionId })
       .andWhere('elector.estamento = :estamento', { estamento })
-      .select('elector.carrera', 'carrera')
+      .select('LOWER(TRIM(elector.carrera))', 'carrera_norm')
       .addSelect('COUNT(rs.id)', 'total')
-      .groupBy('elector.carrera')
+      .groupBy('LOWER(TRIM(elector.carrera))')
       .getRawMany();
 
     const votosMap = new Map<string, number>();
     for (const row of votosRows) {
-      votosMap.set(row.carrera, parseInt(row.total, 10));
+      votosMap.set(row.carrera_norm, parseInt(row.total, 10));
     }
 
     return habRows.map((row) => {
       const habilitados = parseInt(row.total, 10);
-      const votos = votosMap.get(row.carrera) ?? 0;
+      const votos = votosMap.get(row.carrera_norm) ?? 0;
       return {
-        carrera: row.carrera,
+        carrera: row.carrera,   // nombre legible para mostrar en UI
         habilitados,
         votos,
         porcentaje: this.calcularPorcentaje(votos, habilitados),
