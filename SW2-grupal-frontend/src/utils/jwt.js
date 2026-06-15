@@ -35,11 +35,25 @@ export function decodeJwtPayload(token) {
  * @param {string | null | undefined} token JWT.
  * @returns {'ADMIN' | 'SISTEMAS' | 'ELECTORAL' | 'ESTUDIANTE' | null} Rol si existe, caso contrario null.
  */
+/**
+ * Verifica si un JWT está expirado.
+ * @param {string | null | undefined} token JWT.
+ * @returns {boolean} true si expiró o es inválido.
+ */
+export function isTokenExpired(token) {
+  const payload = decodeJwtPayload(token)
+  if (!payload?.exp) return true
+  // exp es en segundos, Date.now() en milisegundos
+  return Date.now() >= payload.exp * 1000
+}
+
 export function getRoleFromToken(token) {
+  if (isTokenExpired(token)) return null
+
   const payload = decodeJwtPayload(token)
   const role = payload?.role
 
-  if (role === 'ADMIN' || role === 'SISTEMAS' || role === 'ELECTORAL' || role === 'ESTUDIANTE') {
+  if (['ADMIN', 'SISTEMAS', 'ELECTORAL', 'ESTUDIANTE', 'DOCENTE', 'ADMINISTRATIVO'].includes(role)) {
     return role
   }
 

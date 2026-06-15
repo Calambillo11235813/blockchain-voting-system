@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react'
 import { setApiAuthToken } from '../services/api'
-import { getRoleFromToken } from '../utils/jwt'
+import { getRoleFromToken, isTokenExpired } from '../utils/jwt'
 
 const STORAGE_KEY = 'auth.token'
 
@@ -18,7 +18,7 @@ export const AuthContext = createContext(null)
 /**
  * Hook para consumir el contexto de autenticación.
  *
- * @returns {{ token: string | null, student: any, isAuthenticated: boolean, login: Function, logout: Function }}
+ * @returns {{ token: string | null, student: any, isAuthenticated: boolean, isReady: boolean, login: Function, logout: Function }}
  */
 export function useAuth() {
   const value = useContext(AuthContext)
@@ -33,11 +33,21 @@ export function useAuth() {
  *
  * - Guarda el token en `localStorage`.
  * - Configura el header `Authorization: Bearer` en Axios.
+ * - Expone `isReady` para que las rutas protegigas no redirijan hasta
+ *   que la inicialización haya terminado (evita flash de "Unauthorized" en F5).
  */
 export function AuthProvider({ children }) {
+  const [isReady, setIsReady] = useState(false)
+
   const [token, setToken] = useState(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY)
+      const stored = localStorage.getItem(STORAGE_KEY)
+      // Si el token ya está expirado, lo descartamos de entrada
+      if (stored && isTokenExpired(stored)) {
+        localStorage.removeItem(STORAGE_KEY)
+        return null
+      }
+      return stored
     } catch {
       return null
     }
@@ -45,8 +55,10 @@ export function AuthProvider({ children }) {
   const [student, setStudent] = useState(null)
   const [role, setRole] = useState(() => getRoleFromToken(token))
 
+  // Sincronizar Axios y marcar como listo tras el primer render
   useEffect(() => {
     setApiAuthToken(token)
+    setIsReady(true)
   }, [token])
 
   const login = useCallback(({ token: nextToken, student: nextStudent }) => {
@@ -68,13 +80,14 @@ export function AuthProvider({ children }) {
       token,
       student,
       role,
+      isReady,
       isAuthenticated: Boolean(token),
       isAdmin: ['ADMIN', 'SISTEMAS', 'ELECTORAL'].includes(role),
-      isStudent: role === 'ESTUDIANTE',
+      isElector: ['ESTUDIANTE', 'DOCENTE', 'ADMINISTRATIVO'].includes(role),
       login,
       logout,
     }
-  }, [token, student, role, login, logout])
+  }, [token, student, role, isReady, login, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

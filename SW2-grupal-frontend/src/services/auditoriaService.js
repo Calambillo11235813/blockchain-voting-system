@@ -56,6 +56,17 @@ export async function obtenerDetallesBloque(numero) {
 }
 
 /**
+ * Obtiene la bitácora anónima de las últimas transacciones registradas.
+ * Solo accesible para rol SISTEMAS.
+ *
+ * @returns {Promise<Array>} Lista de transacciones (id, txHash, fecha)
+ */
+export async function obtenerBitacoraTransacciones() {
+  const response = await api.get('/admin/auditoria/bitacora')
+  return response?.data?.datos || []
+}
+
+/**
  * Obtiene estadísticas generales del blockchain.
  * Información pública - accesible por cualquier usuario autenticado.
  *

@@ -94,12 +94,13 @@ export default function EstadisticasEnVivo() {
 
   // Preparar datos para el gráfico comparativo
   const chartData = useMemo(() => {
-    if (!participacion?.desglose) return []
-    return participacion.desglose.map(item => ({
-      name: item.estamento,
-      Habilitados: item.habilitados,
-      Emitidos: item.votosEmitidos,
-    }))
+    if (!participacion?.porEstamento) return []
+    const p = participacion.porEstamento
+    return [
+      { name: 'Estudiantil', Habilitados: p.estudiante?.habilitados || 0, Emitidos: p.estudiante?.votos || 0 },
+      { name: 'Docente', Habilitados: p.docente?.habilitados || 0, Emitidos: p.docente?.votos || 0 },
+      { name: 'Administrativo', Habilitados: p.administrativo?.habilitados || 0, Emitidos: p.administrativo?.votos || 0 }
+    ].filter(item => item.Habilitados > 0 || item.Emitidos > 0)
   }, [participacion])
 
   return (
@@ -175,17 +176,17 @@ export default function EstadisticasEnVivo() {
                   <div className="flex justify-between items-center bg-slate-50 p-3 rounded">
                     <span className="text-sm font-semibold text-slate-700">Participación General:</span>
                     <span className="text-lg font-bold text-blue-900">
-                      {Number(estudiantes.participacionGlobal || 0).toFixed(2)}%
+                      {Number(estudiantes.porcentajeParticipacion || 0).toFixed(2)}%
                     </span>
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Desglose por Subgrupo</p>
                     <ul className="space-y-2">
-                      {(estudiantes.desglose || []).map((item, idx) => (
+                      {(estudiantes.desglosePorCarrera || []).map((item, idx) => (
                         <li key={idx} className="flex justify-between text-sm">
-                          <span className="text-slate-700">{item.nombre}</span>
+                          <span className="text-slate-700">{item.carrera}</span>
                           <span className="font-medium text-blue-900">
-                            {Number(item.porcentaje || 0).toFixed(2)}% ({item.votosEmitidos}/{item.habilitados})
+                            {Number(item.porcentaje || 0).toFixed(2)}% ({item.votos}/{item.habilitados})
                           </span>
                         </li>
                       ))}
@@ -205,17 +206,17 @@ export default function EstadisticasEnVivo() {
                   <div className="flex justify-between items-center bg-slate-50 p-3 rounded">
                     <span className="text-sm font-semibold text-slate-700">Participación General:</span>
                     <span className="text-lg font-bold text-blue-900">
-                      {Number(docentes.participacionGlobal || 0).toFixed(2)}%
+                      {Number(docentes.porcentajeParticipacion || 0).toFixed(2)}%
                     </span>
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Desglose por Subgrupo</p>
                     <ul className="space-y-2">
-                      {(docentes.desglose || []).map((item, idx) => (
+                      {(docentes.desglosePorCarrera || []).map((item, idx) => (
                         <li key={idx} className="flex justify-between text-sm">
-                          <span className="text-slate-700">{item.nombre}</span>
+                          <span className="text-slate-700">{item.carrera}</span>
                           <span className="font-medium text-blue-900">
-                            {Number(item.porcentaje || 0).toFixed(2)}% ({item.votosEmitidos}/{item.habilitados})
+                            {Number(item.porcentaje || 0).toFixed(2)}% ({item.votos}/{item.habilitados})
                           </span>
                         </li>
                       ))}

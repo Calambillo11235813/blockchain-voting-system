@@ -197,7 +197,9 @@ export default function GestionPadron() {
                             {row.elector?.estamento}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-700"></td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          {row.elector?.carrera || <span className="text-slate-400 italic">—</span>}
+                        </td>
                         <td className="px-4 py-3 text-center text-sm text-slate-700">
                           <span className="inline-flex rounded-full px-2 py-1 text-xs font-semibold bg-green-100 text-green-800">
                             Habilitado

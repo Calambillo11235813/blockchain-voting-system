@@ -1,12 +1,40 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { obtenerDetallesTransaccion, obtenerDetallesBloque } from '../../../services/auditoriaService'
 
 export default function AuditoriaBlockchain() {
+  const location = useLocation()
+  
   const [tipoConsulta, setTipoConsulta] = useState('transaccion')
   const [busqueda, setBusqueda] = useState('')
   const [resultado, setResultado] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  // Cargar hash desde react-router state si viene redirigido desde la bitácora
+  useEffect(() => {
+    if (location.state?.parametroHash) {
+      setTipoConsulta('transaccion')
+      setBusqueda(location.state.parametroHash)
+      // Opcional: auto-buscar aquí (requiere envolver handleBuscarForm en useCallback o pasar el param)
+      buscarAutomáticamente(location.state.parametroHash)
+    }
+  }, [location.state])
+
+  const buscarAutomáticamente = async (hash) => {
+    try {
+      setLoading(true)
+      setError(null)
+      setResultado(null)
+      const datos = await obtenerDetallesTransaccion(hash)
+      setResultado({ tipo: 'transaccion', datos })
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Error en la consulta')
+      console.error('Error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleBuscar = async (e) => {
     e.preventDefault()

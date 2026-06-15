@@ -5,7 +5,7 @@ import StudentDashboard from '../pages/StudentDashboard'
 import BiometriaCapture from '../pages/BiometriaCapture'
 import VotingBallot from '../pages/VotingBallot'
 import AdminRoute from './AdminRoute'
-import StudentRoute from './StudentRoute'
+import ElectorRoute from './ElectorRoute'
 import RoleRoute from './RoleRoute'
 import DashboardRouter from './DashboardRouter'
 import AdminLayout from '../layouts/AdminLayout'
@@ -21,6 +21,7 @@ import GestionAdministradores from '../pages/admin/sistemas/GestionAdministrador
 import ConfiguracionSistema from '../pages/admin/sistemas/ConfiguracionSistema'
 import MonitoreoNodos from '../pages/admin/sistemas/MonitoreoNodos'
 import AuditoriaBlockchain from '../pages/admin/sistemas/AuditoriaBlockchain'
+import BitacoraTransacciones from '../pages/admin/sistemas/BitacoraTransacciones'
 import VotoExitoso from '../pages/VotoExitoso'
 
 /**
@@ -133,10 +134,18 @@ export default function AppRoutes() {
               </RoleRoute>
             }
           />
+          <Route
+            path="bitacora"
+            element={
+              <RoleRoute allowedRoles={['SISTEMAS']}>
+                <BitacoraTransacciones />
+              </RoleRoute>
+            }
+          />
         </Route>
       </Route>
 
-      <Route element={<StudentRoute />}>
+      <Route element={<ElectorRoute />}>
         <Route path="/estudiante/dashboard" element={<StudentDashboard />} />
         <Route path="/estudiante/biometria" element={<BiometriaCapture />} />
         <Route path="/estudiante/votacion" element={<VotingBallot />} />

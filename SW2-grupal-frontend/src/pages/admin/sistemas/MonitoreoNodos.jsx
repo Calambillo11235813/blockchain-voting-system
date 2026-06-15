@@ -28,7 +28,7 @@ export default function MonitoreoNodos() {
       setError(null)
       const data = await obtenerEstadoNodos()
       console.log('Respuesta cruda de la API:', data)
-      
+
       // Mapeo seguro de datos
       const arrayNodos = data?.nodos || data?.data || data
       setNodos(Array.isArray(arrayNodos) ? arrayNodos : [])
@@ -70,8 +70,8 @@ export default function MonitoreoNodos() {
       estado === 'activo' || estado === 'Sincronizado' || estado === 'Online'
         ? 'Online'
         : estado === 'inactivo' || estado === 'Caído'
-        ? 'Caído'
-        : 'lento'
+          ? 'Caído'
+          : 'lento'
 
     return ESTADO_COLORES[normalized] || ESTADO_COLORES['Caído']
   }
@@ -155,7 +155,7 @@ export default function MonitoreoNodos() {
                 <div>
                   <p className="text-xs font-semibold uppercase text-gray-500">Bloque Actual</p>
                   <p className="mt-1 text-lg font-semibold text-gray-900">
-                    {nodo.bloque_actual || 'N/A'}
+                    {nodo.bloque_actual !== null && nodo.bloque_actual !== undefined ? nodo.bloque_actual : 'N/A'}
                   </p>
                 </div>
               </div>

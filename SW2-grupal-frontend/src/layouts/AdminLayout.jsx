@@ -15,6 +15,7 @@ const SIDEBAR_ITEMS = [
   { key: 'configuracion', label: 'Configuración del Sistema', to: '/admin/configuracion', rolesRequeridos: ['SISTEMAS'] },
   { key: 'nodos', label: 'Monitoreo de Nodos', to: '/admin/nodos', rolesRequeridos: ['SISTEMAS'] },
   { key: 'auditoria', label: 'Auditoría Blockchain', to: '/admin/auditoria', rolesRequeridos: ['SISTEMAS'] },
+  { key: 'bitacora', label: 'Bitácora de Votos', to: '/admin/bitacora', rolesRequeridos: ['SISTEMAS'] },
 ]
 
 /**
