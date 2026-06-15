@@ -28,8 +28,13 @@ export default function VotingBallot() {
   const [estadisticas, setEstadisticas] = useState(null)
   const [isDownloading, setIsDownloading] = useState(false)
 
+  const { token, role, logout } = useAuth()
   const navigate = useNavigate()
-  const { token, role } = useAuth()
+
+  function handleLogout() {
+    logout()
+    navigate('/login', { replace: true })
+  }
 
   // Carga la elección activa y su papeleta automáticamente
   useEffect(() => {
@@ -168,14 +173,18 @@ export default function VotingBallot() {
       const result = await emitirVoto(activeElectionId, electorId, candidatoId)
       
       setShowConfirmModal(false)
-      // Redirigir a la pantalla de éxito con el hash
-      navigate('/estudiante/voto-exitoso', { 
-        replace: true, 
-        state: { 
-          txHash: result?.hashTransaccion || result?.txHash,
-          eleccionId: activeElectionId
-        } 
-      })
+      // Mostrar el dashboard post-votación con estadísticas en el mismo componente
+      setHaVotado(true)
+      setTxHash(result?.hashTransaccion || result?.txHash)
+
+      // Cargar estadísticas en vivo
+      const statsMethod = role === 'DOCENTE' ? getEstadisticasDocentes : getEstadisticasEstudiantes
+      try {
+        const statsData = await statsMethod(activeElectionId)
+        setEstadisticas(statsData)
+      } catch (err) {
+        console.error('Error cargando estadísticas', err)
+      }
     } catch (error) {
       console.error(error)
       const errorMsg = error?.response?.data?.message || error?.message || 'Error al emitir el voto.'
@@ -213,8 +222,19 @@ export default function VotingBallot() {
               </p>
             </div>
 
-            {/* Botón Confirmar voto */}
-            {selectedFrenteKey && (
+            {/* Botón Confirmar voto o Cerrar sesión */}
+            {haVotado ? (
+              <button
+                id="btn-cerrar-sesion"
+                onClick={handleLogout}
+                className="flex shrink-0 items-center gap-2 rounded-lg bg-red-500 px-5 py-2.5 text-sm font-bold text-white shadow hover:bg-red-400 active:scale-95 transition-all"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3-3l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+                Cerrar sesión
+              </button>
+            ) : selectedFrenteKey ? (
               <button
                 id="btn-confirmar-voto"
                 onClick={() => setShowConfirmModal(true)}
@@ -225,7 +245,7 @@ export default function VotingBallot() {
                 </svg>
                 Confirmar voto
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -299,15 +319,58 @@ export default function VotingBallot() {
                 </div>
                 
                 <div className="mt-6">
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-semibold text-slate-700">Participación del Estamento</span>
-                    <span className="font-bold text-blue-900">{estadisticas.porcentajeParticipacion}%</span>
-                  </div>
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100 mb-6">
-                    <div 
-                      className="h-full rounded-full bg-blue-600 transition-all duration-1000 ease-out"
-                      style={{ width: `${Math.min(100, Math.max(0, estadisticas.porcentajeParticipacion))}%` }}
-                    />
+                  <div className="flex flex-col items-center">
+                    <p className="mb-4 text-sm font-semibold text-slate-700">Participación del Estamento</p>
+                    {(() => {
+                      const pct = Math.min(100, Math.max(0, estadisticas.porcentajeParticipacion))
+                      const radius = 54
+                      const circumference = 2 * Math.PI * radius
+                      const filled = (pct / 100) * circumference
+                      const remaining = circumference - filled
+                      return (
+                        <div className="relative inline-flex items-center justify-center">
+                          <svg width="140" height="140" viewBox="0 0 140 140" className="-rotate-90">
+                            {/* Fondo del donut */}
+                            <circle
+                              cx="70" cy="70" r={radius}
+                              fill="none" stroke="#e2e8f0" strokeWidth="12"
+                            />
+                            {/* Arco de participación */}
+                            <circle
+                              cx="70" cy="70" r={radius}
+                              fill="none" stroke="url(#donutGradient)" strokeWidth="12"
+                              strokeLinecap="round"
+                              strokeDasharray={`${filled} ${remaining}`}
+                              style={{
+                                transition: 'stroke-dasharray 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                              }}
+                            />
+                            <defs>
+                              <linearGradient id="donutGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#2563eb" />
+                                <stop offset="100%" stopColor="#16a34a" />
+                              </linearGradient>
+                            </defs>
+                          </svg>
+                          {/* Porcentaje centrado */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-2xl font-black text-blue-900">{pct}%</span>
+                            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">participación</span>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                    {/* Leyenda debajo del donut */}
+                    <div className="mt-4 flex items-center gap-5 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+                        <span className="text-slate-600">Votaron: <strong className="text-slate-900">{estadisticas.totalVotosEmitidos}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-200" />
+                        <span className="text-slate-600">Pendientes: <strong className="text-slate-900">{estadisticas.totalHabilitados - estadisticas.totalVotosEmitidos}</strong></span>
+                      </div>
+                    </div>
                   </div>
                   
                   {txHash && (

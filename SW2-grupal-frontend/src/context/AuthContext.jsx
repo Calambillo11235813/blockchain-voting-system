@@ -31,7 +31,7 @@ export function useAuth() {
 /**
  * Proveedor de autenticación para manejar el estado global del login.
  *
- * - Guarda el token en `localStorage`.
+ * - Guarda el token en `sessionStorage` (aislado por pestaña).
  * - Configura el header `Authorization: Bearer` en Axios.
  * - Expone `isReady` para que las rutas protegigas no redirijan hasta
  *   que la inicialización haya terminado (evita flash de "Unauthorized" en F5).
@@ -41,10 +41,10 @@ export function AuthProvider({ children }) {
 
   const [token, setToken] = useState(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
+      const stored = sessionStorage.getItem(STORAGE_KEY)
       // Si el token ya está expirado, lo descartamos de entrada
       if (stored && isTokenExpired(stored)) {
-        localStorage.removeItem(STORAGE_KEY)
+        sessionStorage.removeItem(STORAGE_KEY)
         return null
       }
       return stored
@@ -62,14 +62,14 @@ export function AuthProvider({ children }) {
   }, [token])
 
   const login = useCallback(({ token: nextToken, student: nextStudent }) => {
-    localStorage.setItem(STORAGE_KEY, nextToken)
+    sessionStorage.setItem(STORAGE_KEY, nextToken)
     setToken(nextToken)
     setStudent(nextStudent || null)
     setRole(getRoleFromToken(nextToken))
   }, [])
 
   const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem(STORAGE_KEY)
     setToken(null)
     setStudent(null)
     setRole(null)

@@ -22,7 +22,6 @@ import ConfiguracionSistema from '../pages/admin/sistemas/ConfiguracionSistema'
 import MonitoreoNodos from '../pages/admin/sistemas/MonitoreoNodos'
 import AuditoriaBlockchain from '../pages/admin/sistemas/AuditoriaBlockchain'
 import BitacoraTransacciones from '../pages/admin/sistemas/BitacoraTransacciones'
-import VotoExitoso from '../pages/VotoExitoso'
 
 /**
  * Definición básica de rutas.
@@ -149,7 +148,6 @@ export default function AppRoutes() {
         <Route path="/estudiante/dashboard" element={<StudentDashboard />} />
         <Route path="/estudiante/biometria" element={<BiometriaCapture />} />
         <Route path="/estudiante/votacion" element={<VotingBallot />} />
-        <Route path="/estudiante/voto-exitoso" element={<VotoExitoso />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />
