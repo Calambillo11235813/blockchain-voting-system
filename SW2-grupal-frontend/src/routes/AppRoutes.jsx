@@ -22,6 +22,7 @@ import ConfiguracionSistema from '../pages/admin/sistemas/ConfiguracionSistema'
 import MonitoreoNodos from '../pages/admin/sistemas/MonitoreoNodos'
 import AuditoriaBlockchain from '../pages/admin/sistemas/AuditoriaBlockchain'
 import BitacoraTransacciones from '../pages/admin/sistemas/BitacoraTransacciones'
+import DespliegueContratos from '../pages/admin/sistemas/DespliegueContratos'
 
 /**
  * Definición básica de rutas.
@@ -138,6 +139,14 @@ export default function AppRoutes() {
             element={
               <RoleRoute allowedRoles={['SISTEMAS']}>
                 <BitacoraTransacciones />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="despliegue-contratos"
+            element={
+              <RoleRoute allowedRoles={['SISTEMAS']}>
+                <DespliegueContratos />
               </RoleRoute>
             }
           />

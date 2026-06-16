@@ -29,9 +29,8 @@ export default function DashboardSistemas() {
       id: 'CU-03',
       titulo: 'Desplegar Smart Contracts',
       descripcion: 'Gestionar el despliegue de contratos inteligentes en blockchain',
-      ruta: '#',
+      ruta: '/admin/despliegue-contratos',
       icono: '🔗',
-      disabled: true,
     },
     {
       id: 'CU-04',

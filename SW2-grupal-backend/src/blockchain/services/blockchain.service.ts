@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ethers } from 'ethers';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ParametroSistema } from '../../elecciones/entities/parametro-sistema.entity';
 import VotacionAbi from '../abi/VotacionABI.json';
 
 interface VotacionContract {
@@ -14,29 +17,58 @@ interface VotacionContract {
 @Injectable()
 export class BlockchainService implements OnModuleInit {
   private provider?: ethers.JsonRpcProvider;
-  private contract?: ethers.Contract;
   private readonly rpcUrl = process.env.BLOCKCHAIN_RPC_URL || process.env.BLOCKCHAIN_URL || 'http://127.0.0.1:8545';
-  private readonly contractAddress =
-    process.env.VOTACION_CONTRACT_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+  private readonly defaultContractAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+
+  constructor(
+    @InjectRepository(ParametroSistema)
+    private readonly paramRepo: Repository<ParametroSistema>,
+  ) {}
 
   /**
-   * Inicializa el proveedor y la instancia del contrato al arrancar el modulo.
+   * Inicializa el proveedor al arrancar el modulo.
    * @returns void
-   * @throws BadRequestException si la direccion del contrato es invalida.
    * @throws ServiceUnavailableException si el ABI esta vacio.
    */
   onModuleInit(): void {
-    if (!ethers.isAddress(this.contractAddress)) {
-      throw new BadRequestException('VOTACION_CONTRACT_ADDRESS no es una direccion valida');
-    }
-
     const abi = (VotacionAbi as { abi?: unknown }).abi ?? VotacionAbi;
     if (!Array.isArray(abi) || abi.length === 0) {
       throw new ServiceUnavailableException('Votacion ABI esta vacio. Pega el ABI generado por Hardhat.');
     }
 
     this.provider = new ethers.JsonRpcProvider(this.rpcUrl);
-    this.contract = new ethers.Contract(this.contractAddress, abi, this.provider);
+  }
+
+  /**
+   * Obtiene la dirección del contrato activa de la BD, o del .env, o el default de Hardhat.
+   */
+  async getActiveContractAddress(): Promise<string> {
+    const param = await this.paramRepo.findOne({ where: { clave: 'VOTACION_CONTRACT_ADDRESS' } });
+    if (param && param.valor && ethers.isAddress(param.valor)) {
+      return param.valor;
+    }
+    const envAddress = process.env.VOTACION_CONTRACT_ADDRESS;
+    if (envAddress && ethers.isAddress(envAddress)) {
+      return envAddress;
+    }
+    return this.defaultContractAddress;
+  }
+
+  /**
+   * Guarda la nueva dirección del contrato en la base de datos (CU-03).
+   */
+  async guardarDireccionContrato(address: string, adminId?: string): Promise<void> {
+    let param = await this.paramRepo.findOne({ where: { clave: 'VOTACION_CONTRACT_ADDRESS' } });
+    if (!param) {
+      param = this.paramRepo.create({
+        clave: 'VOTACION_CONTRACT_ADDRESS',
+        descripcion: 'Dirección del Smart Contract Votacion en uso',
+        tipo: 'string',
+      });
+    }
+    param.valor = address;
+    if (adminId) param.actualizadoPor = adminId;
+    await this.paramRepo.save(param);
   }
 
   private getProvider(): ethers.JsonRpcProvider {
@@ -47,12 +79,13 @@ export class BlockchainService implements OnModuleInit {
     return this.provider;
   }
 
-  private getContract(): VotacionContract {
-    if (!this.contract) {
-      throw new ServiceUnavailableException('BlockchainService no esta inicializado.');
-    }
-
-    return this.contract as unknown as VotacionContract;
+  private async getContract(): Promise<VotacionContract> {
+    const address = await this.getActiveContractAddress();
+    const abi = (VotacionAbi as { abi?: unknown }).abi ?? VotacionAbi;
+    const provider = this.getProvider();
+    
+    const contract = new ethers.Contract(address, abi as any, provider);
+    return contract as unknown as VotacionContract;
   }
 
   /**
@@ -67,7 +100,8 @@ export class BlockchainService implements OnModuleInit {
     const trimmedKey = privateKey.trim();
     const normalizedKey = trimmedKey.startsWith('0x') ? trimmedKey : `0x${trimmedKey}`;
     const wallet = new ethers.Wallet(normalizedKey, this.getProvider());
-    const contractWithSigner = this.getContract().connect(wallet);
+    const contractInstance = await this.getContract();
+    const contractWithSigner = contractInstance.connect(wallet);
 
     const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(eleccionId));
     const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(candidatoId));
@@ -88,7 +122,8 @@ export class BlockchainService implements OnModuleInit {
     const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(eleccionId));
     const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(candidatoId));
     
-    const votos = await this.getContract().obtenerVotos(eleccionHash, candidatoHash);
+    const contractInstance = await this.getContract();
+    const votos = await contractInstance.obtenerVotos(eleccionHash, candidatoHash);
     return Number(votos);
   }
 
@@ -193,6 +228,110 @@ export class BlockchainService implements OnModuleInit {
       timestamp: bloque.timestamp,
       totalTransacciones: bloque.transactions.length,
       minero: bloque.miner,
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // CU-03: Desplegar Smart Contracts
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Despliega una nueva instancia del contrato Votacion en la blockchain.
+   * Usa ethers.ContractFactory con el ABI y bytecode del artefacto de Hardhat.
+   * @returns Dirección del contrato desplegado y hash de la transacción.
+   */
+  async deployContract(): Promise<{
+    contractAddress: string;
+    txHash: string;
+    deployer: string;
+    blockNumber: number;
+  }> {
+    const provider = this.getProvider();
+
+    const privateKey =
+      process.env.VOTING_WALLET_PRIVATE_KEY ||
+      process.env.WALLET_PRIVATE_KEY;
+
+    if (!privateKey) {
+      throw new ServiceUnavailableException(
+        'No se encontró VOTING_WALLET_PRIVATE_KEY ni WALLET_PRIVATE_KEY en las variables de entorno.',
+      );
+    }
+
+    const trimmedKey = privateKey.trim();
+    const normalizedKey = trimmedKey.startsWith('0x') ? trimmedKey : `0x${trimmedKey}`;
+    const wallet = new ethers.Wallet(normalizedKey, provider);
+
+    const abi = (VotacionAbi as { abi?: unknown }).abi ?? VotacionAbi;
+    // Bytecode del artefacto de Hardhat (generado al compilar Votacion.sol)
+    const bytecode = (VotacionAbi as { bytecode?: string }).bytecode;
+
+    if (!bytecode) {
+      throw new ServiceUnavailableException(
+        'No se encontró el bytecode en VotacionABI.json. Asegúrate de usar el artefacto completo de Hardhat.',
+      );
+    }
+
+    const factory = new ethers.ContractFactory(abi as any, bytecode, wallet);
+    const contract = await factory.deploy();
+    const deployTx = contract.deploymentTransaction();
+    await contract.waitForDeployment();
+
+    const deployedAddress = await contract.getAddress();
+    const blockNumber = deployTx?.blockNumber ?? 0;
+
+    return {
+      contractAddress: deployedAddress,
+      txHash: deployTx?.hash ?? '',
+      deployer: wallet.address,
+      blockNumber,
+    };
+  }
+
+  /**
+   * Obtiene información del contrato actualmente configurado.
+   * @returns Info del contrato: dirección, admin, votos globales, red y si tiene código.
+   */
+  async getContractInfo(): Promise<{
+    contractAddress: string;
+    admin: string;
+    totalVotosGlobal: number;
+    network: { chainId: number; name: string };
+    hasCode: boolean;
+    rpcUrl: string;
+  }> {
+    const provider = this.getProvider();
+
+    const activeAddress = await this.getActiveContractAddress();
+    const network = await provider.getNetwork();
+    const code = await provider.getCode(activeAddress);
+    const hasCode = code !== '0x' && code.length > 2;
+
+    let admin = '';
+    let totalVotosGlobal = 0;
+
+    if (hasCode) {
+      try {
+        const abi = (VotacionAbi as { abi?: unknown }).abi ?? VotacionAbi;
+        const contract = new ethers.Contract(activeAddress, abi as any, provider);
+        admin = await (contract as any).admin();
+        const total = await (contract as any).totalVotosGlobal();
+        totalVotosGlobal = Number(total);
+      } catch {
+        // El contrato puede no existir o tener una interfaz incompatible
+      }
+    }
+
+    return {
+      contractAddress: activeAddress,
+      admin,
+      totalVotosGlobal,
+      network: {
+        chainId: Number(network.chainId),
+        name: network.name,
+      },
+      hasCode,
+      rpcUrl: this.rpcUrl,
     };
   }
 }

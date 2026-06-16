@@ -3,18 +3,20 @@ import {
   obtenerParametros,
   actualizarParametro,
   crearParametro,
-  eliminarParametro,
 } from '../../../services/configuracionService'
 
 const PARAMETROS_SISTEMA = {
-  BYPASS_ELECTION_TIME: { label: "Omitir Horario Electoral", tipo: "boolean", descripcion: "Desactiva el reloj electoral. Permite emitir votos sin importar la hora o la letra del apellido." },
-  BYPASS_BIOMETRIA_FACE_MATCH: { label: "Omitir Reconocimiento Facial", tipo: "boolean", descripcion: "Desactiva la evaluación estricta de coincidencia facial al momento de verificar la identidad." },
-  BIOMETRIA_FACE_MATCH_ALLOW_RUNTIME_BYPASS: { label: "Permitir Salto de Biometría manual", tipo: "boolean", descripcion: "Habilita un botón en la interfaz para que el usuario pueda saltar la biometría en caso de fallos técnicos." },
-  BIOMETRIA_DEBUG: { label: "Modo Depuración Biométrica", tipo: "boolean", descripcion: "Muestra logs y datos adicionales durante el escaneo facial para diagnóstico de errores." },
-  BIOMETRIA_OCR_PROVIDER: { label: "Proveedor de IA para OCR", tipo: "select", opciones: ["gemini_then_local", "gemini", "local"], descripcion: "Define qué motor procesará la lectura del carnet de identidad." },
-  GEMINI_MODEL: { label: "Modelo de Gemini", tipo: "text", descripcion: "Versión exacta del modelo de inteligencia artificial de Google a utilizar (ej. gemini-2.5-flash)." },
-  GEMINI_TIMEOUT_MS: { label: "Tiempo de espera Gemini (ms)", tipo: "number", descripcion: "Tiempo máximo en milisegundos que el sistema esperará una respuesta de la IA antes de fallar." },
-  NODOS_RPC_URLS: { label: "Nodos Blockchain (RPC)", tipo: "text", descripcion: "URLs de los nodos de la red separadas por coma para el monitoreo de salud del sistema." }
+  // Sistema Electoral
+  BYPASS_ELECTION_TIME: { label: "Omitir Horario Electoral", tipo: "boolean", descripcion: "Desactiva el reloj electoral. Permite emitir votos sin importar la hora o la letra del apellido.", categoria: "Sistema Electoral" },
+  
+  // Biometría e IA
+  BYPASS_BIOMETRIA_FACE_MATCH: { label: "Omitir Reconocimiento Facial", tipo: "boolean", descripcion: "Desactiva la evaluación estricta de coincidencia facial al momento de verificar la identidad.", categoria: "Biometría e Inteligencia Artificial" },
+  BYPASS_BIOMETRIA_OCR: { label: "Omitir Lectura OCR", tipo: "boolean", descripcion: "Desactiva el reconocimiento de texto (OCR) en ambos lados del carnet para facilitar pruebas.", categoria: "Biometría e Inteligencia Artificial" },
+  GEMINI_MODEL: { label: "Modelo de Gemini", tipo: "text", descripcion: "Versión exacta del modelo de inteligencia artificial de Google a utilizar (ej. gemini-2.5-flash).", categoria: "Biometría e Inteligencia Artificial" },
+  
+  // Blockchain y Nodos
+  NODOS_RPC_URLS: { label: "Nodos Blockchain (RPC)", tipo: "text", descripcion: "URLs de los nodos de la red separadas por coma para el monitoreo de salud del sistema.", categoria: "Blockchain y Nodos" },
+  VOTACION_CONTRACT_ADDRESS: { label: "Dirección del Contrato", tipo: "text", descripcion: "Dirección en la blockchain del contrato inteligente actualmente en uso para registrar votos.", categoria: "Blockchain y Nodos" }
 };
 
 export default function ConfiguracionSistema() {
@@ -125,18 +127,7 @@ export default function ConfiguracionSistema() {
     }
   }
 
-  const handleEliminar = async (clave) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el parámetro "${clave}"?`)) return
 
-    try {
-      setError(null)
-      await eliminarParametro(clave)
-      await cargarParametros()
-    } catch (err) {
-      setError(err?.response?.data?.message || 'Error eliminando parámetro')
-      console.error('Error:', err)
-    }
-  }
 
   const handleClaveChange = (e) => {
     const nuevaClave = e.target.value;
@@ -330,68 +321,79 @@ export default function ConfiguracionSistema() {
                 No hay parámetros configurados o no se pudieron cargar.
               </div>
             ) : (
-              parametros.map((param) => {
-                const meta = PARAMETROS_SISTEMA[param.clave];
-                return (
-                  <div
-                    key={param.clave}
-                    className={`rounded-xl border ${editando?.clave === param.clave ? 'border-[#0a3366] bg-blue-50/30' : 'border-gray-200 bg-white'} p-6 shadow-sm hover:shadow-md transition-shadow`}
-                  >
-                    <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
-                      
-                      {/* Lado izquierdo (Info) */}
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold text-[#0a3366]">{meta ? meta.label : param.clave}</h3>
-                        <p className="text-xs font-mono text-gray-400 mt-1 uppercase tracking-wide">{param.clave}</p>
-                        
-                        <div className="mt-3 text-sm text-gray-600">
-                          {meta ? meta.descripcion : param.descripcion}
-                        </div>
-                      </div>
+              Object.entries(
+                parametros.reduce((acc, param) => {
+                  const meta = PARAMETROS_SISTEMA[param.clave];
+                  const categoria = meta ? meta.categoria : 'Otros Parámetros';
+                  if (!acc[categoria]) acc[categoria] = [];
+                  acc[categoria].push(param);
+                  return acc;
+                }, {})
+              ).map(([categoria, paramsCategoria]) => (
+                <div key={categoria} className="mb-8">
+                  <h2 className="mb-4 text-xl font-bold text-gray-800 border-b pb-2">
+                    {categoria}
+                  </h2>
+                  <div className="space-y-4">
+                    {paramsCategoria.map((param) => {
+                      const meta = PARAMETROS_SISTEMA[param.clave];
+                      return (
+                        <div
+                          key={param.clave}
+                          className={`rounded-xl border ${editando?.clave === param.clave ? 'border-[#0a3366] bg-blue-50/30' : 'border-gray-200 bg-white'} p-6 shadow-sm hover:shadow-md transition-shadow`}
+                        >
+                          <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
+                            
+                            {/* Lado izquierdo (Info) */}
+                            <div className="flex-1">
+                              <h3 className="text-lg font-bold text-[#0a3366]">{meta ? meta.label : param.clave}</h3>
+                              <p className="text-xs font-mono text-gray-400 mt-1 uppercase tracking-wide">{param.clave}</p>
+                              
+                              <div className="mt-3 text-sm text-gray-600">
+                                {meta ? meta.descripcion : param.descripcion}
+                              </div>
+                            </div>
 
-                      {/* Lado derecho (Control) */}
-                      <div className="md:w-64 flex flex-col md:items-end">
-                        <div className="w-full">
-                           <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Estado / Valor</p>
-                           {renderValorVisual(param)}
-                        </div>
+                            {/* Lado derecho (Control) */}
+                            <div className="md:w-64 flex flex-col md:items-end">
+                              <div className="w-full">
+                                 <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Estado / Valor</p>
+                                 {renderValorVisual(param)}
+                              </div>
 
-                        {editando?.clave === param.clave ? (
-                          <div className="mt-4 flex gap-2 justify-end w-full">
-                            <button
-                              onClick={() => setEditando(null)}
-                              className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              onClick={() => handleActualizar(editando)}
-                              className="rounded bg-[#0a3366] px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
-                            >
-                              Guardar
-                            </button>
+                              {editando?.clave === param.clave ? (
+                                <div className="mt-4 flex gap-2 justify-end w-full">
+                                  <button
+                                    onClick={() => setEditando(null)}
+                                    className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={() => handleActualizar(editando)}
+                                    className="rounded bg-[#0a3366] px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-800 transition-colors"
+                                  >
+                                    Guardar
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="mt-4 flex gap-2 justify-end w-full">
+                                  <button
+                                    onClick={() => setEditando(param)}
+                                    className="rounded bg-[#f2a900] px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-600 transition-colors"
+                                  >
+                                    Editar
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        ) : (
-                          <div className="mt-4 flex gap-2 justify-end w-full">
-                            <button
-                              onClick={() => setEditando(param)}
-                              className="rounded bg-[#f2a900] px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-600 transition-colors"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => handleEliminar(param.clave)}
-                              className="rounded border border-[#d32f2f] text-[#d32f2f] px-3 py-1.5 text-sm font-medium hover:bg-red-50 transition-colors"
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                )
-              })
+                </div>
+              ))
             )}
           </div>
         )
