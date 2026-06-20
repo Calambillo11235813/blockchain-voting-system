@@ -78,7 +78,6 @@ export class NodosService {
       };
     } catch (error: unknown) {
       const mensaje = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Nodo ${url} no responde: ${mensaje}`);
       return {
         url,
         estado: 'inactivo',

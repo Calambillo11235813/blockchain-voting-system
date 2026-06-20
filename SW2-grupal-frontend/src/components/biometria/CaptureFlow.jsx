@@ -54,8 +54,8 @@ export default function CaptureFlow({ onSuccess }) {
     const facingMode = currentStep.key === 'selfie' ? 'user' : 'environment'
     return {
       facingMode,
-      width: { ideal: 1920, min: 1280 },
-      height: { ideal: 1080, min: 720 },
+      width: { ideal: 640 },
+      height: { ideal: 480 },
     }
   }, [currentStep.key])
 
@@ -79,10 +79,14 @@ export default function CaptureFlow({ onSuccess }) {
     try {
       const processedScreenshot = screenshot
 
-      const blob = await dataUrlToBlob(processedScreenshot)
-      const extension = blob.type === 'image/png' ? 'png' : 'jpg'
-      const filename = `${currentStep.key}.${extension}`
-      const file = new File([blob], filename, { type: blob.type || 'image/jpeg' })
+      const blob = await resizeImage(processedScreenshot, 640, 0.8)
+      if (!blob) {
+        setErrorMessage('No se pudo procesar la imagen. Intente nuevamente.')
+        return
+      }
+
+      const filename = `${currentStep.key}.jpg`
+      const file = new File([blob], filename, { type: 'image/jpeg' })
 
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setErrorMessage('La imagen es muy pesada. Acérquese más y vuelva a intentar.')
@@ -93,7 +97,7 @@ export default function CaptureFlow({ onSuccess }) {
         ...prev,
         [currentStep.key]: {
           file,
-          previewUrl: screenshot,
+          previewUrl: URL.createObjectURL(blob),
         },
       }))
 
@@ -110,7 +114,7 @@ export default function CaptureFlow({ onSuccess }) {
     fileInputRef.current?.click()
   }, [isSubmitting])
 
-  const handleUploadFromDevice = useCallback((event) => {
+  const handleUploadFromDevice = useCallback(async (event) => {
     setErrorMessage('')
     setSuccessMessage('')
 
@@ -131,18 +135,30 @@ export default function CaptureFlow({ onSuccess }) {
       return
     }
 
-    const previewUrl = URL.createObjectURL(file)
+    try {
+      const dataUrl = await fileToDataURL(file)
+      const compressedBlob = await resizeImage(dataUrl, 640, 0.8)
+      if (!compressedBlob) {
+        setErrorMessage('No se pudo procesar la imagen. Intente nuevamente.')
+        return
+      }
 
-    setCaptures((prev) => ({
-      ...prev,
-      [currentStep.key]: {
-        file,
-        previewUrl,
-      },
-    }))
+      const compressedFile = new File([compressedBlob], `${currentStep.key}.jpg`, { type: 'image/jpeg' })
+      const previewUrl = URL.createObjectURL(compressedBlob)
 
-    if (stepIndex < STEPS.length - 1) {
-      setStepIndex((prev) => prev + 1)
+      setCaptures((prev) => ({
+        ...prev,
+        [currentStep.key]: {
+          file: compressedFile,
+          previewUrl,
+        },
+      }))
+
+      if (stepIndex < STEPS.length - 1) {
+        setStepIndex((prev) => prev + 1)
+      }
+    } catch {
+      setErrorMessage('No se pudo procesar la imagen. Intente nuevamente.')
     }
   }, [currentStep.key, stepIndex])
 
@@ -426,14 +442,41 @@ function CaptureOverlay({ type }) {
 }
 
 /**
- * Convierte un data URL a Blob.
- * @param {string} dataUrl Data URL de imagen.
- * @returns {Promise<Blob>}
+ * Convierte un File a data URL.
+ * @param {File} file Archivo de imagen.
+ * @returns {Promise<string>}
  */
-async function dataUrlToBlob(dataUrl) {
-  const response = await fetch(dataUrl)
-  return response.blob()
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Error al leer el archivo'))
+    reader.readAsDataURL(file)
+  })
+}
 
+/**
+ * Redimensiona una imagen y la comprime como JPEG.
+ * @param {string} dataUrl Data URL de imagen.
+ * @param {number} maxWidth Ancho máximo en píxeles.
+ * @param {number} quality Calidad JPEG (0–1).
+ * @returns {Promise<Blob|null>}
+ */
+function resizeImage(dataUrl, maxWidth = 640, quality = 0.8) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      const ratio = Math.min(maxWidth / img.width, 1)
+      canvas.width = Math.floor(img.width * ratio)
+      canvas.height = Math.floor(img.height * ratio)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      canvas.toBlob((blob) => resolve(blob), 'image/jpeg', quality)
+    }
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
 }
 
 /**
