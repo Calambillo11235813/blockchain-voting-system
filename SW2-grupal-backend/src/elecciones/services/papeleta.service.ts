@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Eleccion } from 'src/elecciones/entities/eleccion.entity';
+import { PadronElectoral } from 'src/elecciones/entities/padron-electoral.entity';
+import { Elector } from 'src/electores/entities/elector.entity';
 
 /**
  * Candidato serializado para la papeleta digital.
@@ -56,14 +58,24 @@ export class PapeletaService {
   constructor(
     @InjectRepository(Eleccion)
     private readonly eleccionRepository: Repository<Eleccion>,
+
+    @InjectRepository(PadronElectoral)
+    private readonly padronElectoralRepository: Repository<PadronElectoral>,
+
+    @InjectRepository(Elector)
+    private readonly electorRepository: Repository<Elector>,
   ) {}
 
   /**
    * Obtiene la papeleta jerárquica completa de una elección.
    * @param eleccionId Identificador UUID de la eleccion.
+   * @param registro Registro universitario opcional para ocultar Rector si no está habilitado.
    * @returns Estructura PapeletaDigital.
    */
-  async obtenerPapeletaDigital(eleccionId: string): Promise<PapeletaDigital> {
+  async obtenerPapeletaDigital(
+    eleccionId: string,
+    registro?: string,
+  ): Promise<PapeletaDigital> {
     const eleccion = await this.eleccionRepository.findOne({
       where: { id: eleccionId },
       relations: {
@@ -80,10 +92,37 @@ export class PapeletaService {
       throw new NotFoundException(`No se encontro la eleccion con id ${eleccionId}`);
     }
 
+    let habilitadoRector = true;
+    if (registro?.trim()) {
+      const elector = await this.electorRepository.findOne({
+        where: [
+          { registro: registro.trim() },
+          { registroDocente: registro.trim() },
+        ],
+      });
+      if (elector) {
+        const entradaPadron = await this.padronElectoralRepository.findOne({
+          where: {
+            eleccion: { id: eleccionId },
+            elector: { id: elector.id },
+          },
+        });
+        habilitadoRector = entradaPadron?.habilitadoRector ?? false;
+      } else {
+        habilitadoRector = false;
+      }
+    }
+
     // Ordenamiento en memoria para garantizar estabilidad
-    const cargosOrdenados = eleccion.eleccionCargos.sort((a, b) => 
-      a.cargo.nombre.localeCompare(b.cargo.nombre)
+    let cargosOrdenados = eleccion.eleccionCargos.sort((a, b) =>
+      a.cargo.nombre.localeCompare(b.cargo.nombre),
     );
+
+    if (registro?.trim() && !habilitadoRector) {
+      cargosOrdenados = cargosOrdenados.filter(
+        ec => ec.cargo.nombre.trim().toUpperCase() !== 'RECTOR',
+      );
+    }
 
     return {
       id: eleccion.id,

@@ -70,7 +70,9 @@ export default function VotingBallot() {
             }
           }
         } else {
-          const data = await fetchBallotComplete(active.id)
+          const payload = decodeJwtPayload(token)
+          const registro = typeof payload?.registro === 'string' ? payload.registro : undefined
+          const data = await fetchBallotComplete(active.id, registro)
           if (isMounted) setBallot(data)
         }
       } catch {
@@ -82,7 +84,7 @@ export default function VotingBallot() {
 
     loadActiveBallot()
     return () => { isMounted = false }
-  }, [])
+  }, [token, role])
 
   // Construye columnas de frentes — idéntica lógica que BallotConfiguration del admin
   const ballotColumns = useMemo(() => {

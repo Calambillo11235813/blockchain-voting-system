@@ -1,19 +1,24 @@
 import { useMemo, useRef, useState } from 'react'
+import { getApiErrorMessage, splitApiErrorLines } from '../utils/apiErrors'
 
 /**
- * Componente para cargar la whitelist/padrón de estudiantes (HU-001).
+ * Componente para cargar el padrón electoral (HU-001).
  *
  * Soporta selección por input y drag & drop.
+ * El resumen de éxito lo renderiza el padre vía `onUploadSuccess`.
  *
- * @param {{ onUpload: (file: File) => Promise<any> }} props
+ * @param {{
+ *   onUpload: (file: File) => Promise<import('../services/adminService').ApiResponsePadronUpload>,
+ *   onUploadSuccess?: (data: import('../services/adminService').ResultadoCargaPadron) => void,
+ * }} props
  */
-export default function WhitelistUpload({ onUpload }) {
+export default function WhitelistUpload({ onUpload, onUploadSuccess }) {
   const inputRef = useRef(null)
 
   const [file, setFile] = useState(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [result, setResult] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
+  const [errorLines, setErrorLines] = useState([])
   const [isDragOver, setIsDragOver] = useState(false)
 
   const canUpload = useMemo(() => {
@@ -24,9 +29,19 @@ export default function WhitelistUpload({ onUpload }) {
     inputRef.current?.click()
   }
 
-  const setSelectedFile = (nextFile) => {
-    setResult(null)
+  /** Limpia archivo e input tras una carga exitosa. */
+  function resetUploadState() {
+    setFile(null)
     setErrorMessage('')
+    setErrorLines([])
+    if (inputRef.current) {
+      inputRef.current.value = ''
+    }
+  }
+
+  const setSelectedFile = (nextFile) => {
+    setErrorMessage('')
+    setErrorLines([])
     setFile(nextFile || null)
   }
 
@@ -54,21 +69,25 @@ export default function WhitelistUpload({ onUpload }) {
   const handleUpload = async () => {
     if (!file) return
     setErrorMessage('')
-    setResult(null)
+    setErrorLines([])
 
     try {
       setIsUploading(true)
       const response = await onUpload(file)
-      setResult(response)
-      // Limpiar el archivo para forzar una nueva selección si editaron el Excel
-      setFile(null)
-      if (inputRef.current) {
-        inputRef.current.value = ''
+
+      if (response?.statusCode === 200 && response?.data) {
+        resetUploadState()
+        onUploadSuccess?.(response.data)
+      } else {
+        const fallback = response?.message || 'No se pudo procesar la carga del padrón.'
+        setErrorMessage(fallback)
+        setErrorLines(splitApiErrorLines(fallback))
       }
     } catch (err) {
       console.error(err)
-      // Mostramos un mensaje amigable sin exponer detalles técnicos.
-      setErrorMessage('Hubo un problema al cargar el padrón. Inténtelo más tarde.')
+      const message = getApiErrorMessage(err, 'Hubo un problema al cargar el padrón. Inténtelo más tarde.')
+      setErrorMessage(message)
+      setErrorLines(splitApiErrorLines(message))
     } finally {
       setIsUploading(false)
     }
@@ -80,7 +99,7 @@ export default function WhitelistUpload({ onUpload }) {
         <div>
           <h2 className="text-base font-semibold text-blue-900">Cargar Padrón Electoral</h2>
           <p className="mt-1 text-sm text-slate-700">
-            Formato permitido: <span className="font-semibold">.xlsx</span>
+            Formato permitido: <span className="font-semibold">.xlsx</span> con hojas Estudiantes y/o Docentes.
           </p>
         </div>
 
@@ -91,6 +110,31 @@ export default function WhitelistUpload({ onUpload }) {
         >
           Seleccionar archivo
         </button>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-xs text-slate-700">
+        <p className="font-semibold text-blue-900">Formato del archivo Excel</p>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="font-medium text-slate-900">Hoja Estudiantes</p>
+            <p className="mt-1 text-slate-600">
+              Cod.Fac. / FAC, Facultad, Cod.lugar / Cod. Lugar, LUGAR DE VOTACION, CARR-PL, CARRERA,
+              Registro, Nombre, CI, RECTOR
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-slate-900">Hoja Docentes</p>
+            <p className="mt-1 text-slate-600">
+              Cod.Fac., Facultad, Cod.Lugar, Lugar, Cod.Docente, Docente, C.I., RECTOR
+            </p>
+          </div>
+        </div>
+        <ul className="mt-3 list-disc space-y-1 pl-4 text-slate-600">
+          <li>Al menos una hoja debe existir.</li>
+          <li>CI acepta complemento (ej. 7453385 SC, 11341460-SCZ).</li>
+          <li>RECTOR: SI / NO.</li>
+          <li>Docente que también estudia puede aparecer en ambas hojas (se fusiona automáticamente).</li>
+        </ul>
       </div>
 
       <input
@@ -129,16 +173,15 @@ export default function WhitelistUpload({ onUpload }) {
 
       {errorMessage ? (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {errorMessage}
-        </div>
-      ) : null}
-
-      {result ? (
-        <div className="mt-4 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-blue-900">
-          <p className="font-semibold">Padrón cargado correctamente</p>
-          <p className="mt-1 text-xs text-slate-700">
-            Total: {result?.data?.totalProcesado ?? '-'} · Nuevos: {result?.data?.electoresInsertados ?? '-'} · Actualizados: {result?.data?.electoresActualizados ?? '-'}
-          </p>
+          {errorLines.length > 1 ? (
+            <ul className="list-disc space-y-1 pl-4">
+              {errorLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            errorMessage
+          )}
         </div>
       ) : null}
 

@@ -32,7 +32,10 @@ export class ElectoresService {
     }
 
     const elector = await this.electorRepository.findOne({
-      where: { registro: normalized },
+      where: [
+        { registro: normalized },
+        { registroDocente: normalized },
+      ],
     });
 
     if (!elector) {

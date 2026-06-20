@@ -31,6 +31,18 @@ export class PadronElectoral {
   @Column('bool', { nullable: false, default: true })
   estaHabilitado: boolean;
 
+  /** Código del recinto de votación (Cod.lugar / Cod.Lugar). */
+  @Column('text', { nullable: true })
+  codLugar: string | null;
+
+  /** Nombre del recinto de votación asignado en este comicio. */
+  @Column('text', { nullable: true })
+  lugarVotacion: string | null;
+
+  /** Indica si el elector puede votar por el cargo de Rector en esta elección. */
+  @Column('bool', { nullable: false, default: false })
+  habilitadoRector: boolean;
+
   /** Fecha de registro del elector en este padrón (auditoría). */
   @CreateDateColumn({ type: 'timestamp' })
   fechaRegistro: Date;

@@ -24,7 +24,7 @@ Los administradores (Corte Electoral) tendrán herramientas para gestionar el ci
 
 | ID | Rol | Quiero... | Para... |
 | :--- | :--- | :--- | :--- |
-| **HU-001** | Administrador | Cargar la lista predefinida de estudiantes (Whitelist). | Asegurar que solo estudiantes habilitados participen en la elección. |
+| **HU-001** | Administrador | Cargar el padrón electoral (Estudiantes y Docentes) desde Excel. | Asegurar que solo votantes habilitados participen en la elección. Ver [HU-001](docs/HU-001-carga-padron.md). |
 | **HU-002** | Estudiante | Iniciar sesión con credenciales universitarias. | Validar mi identidad básica en la plataforma. |
 | **HU-003** | Administrador | Registrar a los candidatos y frentes estudiantiles. | Configurar la papeleta digital correctamente. |
 | **HU-004** | Administrador | Iniciar y finalizar el periodo de votación. | Controlar los tiempos de apertura y cierre de las urnas digitales. |

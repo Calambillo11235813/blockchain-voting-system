@@ -217,12 +217,15 @@ export async function deletePosition(positionId) {
  *
  * Importante:
  * - Este endpoint devuelve el objeto directamente (no viene envuelto en ApiResponse).
+ * - Si se pasa `registro`, el backend filtra cargos según habilitación Rector del elector.
  *
  * @param {string} electionId
+ * @param {string} [registro] Número de registro del elector autenticado.
  * @returns {Promise<any>}
  */
-export async function fetchBallotComplete(electionId) {
-  const response = await api.get(`/elecciones/${electionId}/papeleta`)
+export async function fetchBallotComplete(electionId, registro) {
+  const params = registro ? { registro } : {}
+  const response = await api.get(`/elecciones/${electionId}/papeleta`, { params })
   return response?.data
 }
 

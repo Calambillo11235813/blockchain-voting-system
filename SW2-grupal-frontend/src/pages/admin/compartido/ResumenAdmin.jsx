@@ -3,8 +3,8 @@ import {
   fetchElections,
   fetchFrentes,
   fetchCandidates,
-  fetchTotalStudents,
 } from '../../../services/electionsService'
+import { fetchPadronElectoral } from '../../../services/adminService'
 
 /**
  * Vista de resumen del proceso electoral para administración.
@@ -23,23 +23,40 @@ export default function ResumenAdmin() {
   useEffect(() => {
     async function loadMetrics() {
       try {
-        const [electionsRes, frentesRes, candidatesRes, totalStudentsRes] = await Promise.allSettled([
+        const [electionsRes, frentesRes, candidatesRes] = await Promise.allSettled([
           fetchElections(),
           fetchFrentes(),
           fetchCandidates(),
-          fetchTotalStudents(),
         ])
 
         const elections = electionsRes.status === 'fulfilled' ? electionsRes.value : []
         const frentesCount = frentesRes.status === 'fulfilled' ? frentesRes.value.length : 'Error'
         const candidatesCount = candidatesRes.status === 'fulfilled' ? candidatesRes.value.length : 'Error'
-        const totalStudents = totalStudentsRes.status === 'fulfilled' ? totalStudentsRes.value : 'Error'
 
         const activeElection = elections.find((e) => e.estaActiva)
         const estadoText = activeElection ? 'Activa' : (electionsRes.status === 'fulfilled' ? 'Inactiva' : 'Error')
 
+        let padronCount = '—'
+        if (activeElection) {
+          try {
+            const padronRes = await fetchPadronElectoral(activeElection.id, 1, 1)
+            padronCount = String(padronRes?.metadata?.pagination?.total ?? 0)
+          } catch (padronErr) {
+            console.error('Error loading padron count:', padronErr)
+            padronCount = 'Error'
+          }
+        } else if (elections.length > 0) {
+          try {
+            const padronRes = await fetchPadronElectoral(elections[0].id, 1, 1)
+            padronCount = String(padronRes?.metadata?.pagination?.total ?? 0)
+          } catch (padronErr) {
+            console.error('Error loading padron count:', padronErr)
+            padronCount = 'Error'
+          }
+        }
+
         setMetrics({
-          padron: totalStudents.toString(),
+          padron: padronCount,
           frentes: frentesCount.toString(),
           candidatos: candidatesCount.toString(),
           estado: estadoText,
@@ -68,7 +85,7 @@ export default function ResumenAdmin() {
       </p>
 
       <div className={`mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 ${isLoading ? 'opacity-50' : ''}`}>
-        <SummaryCard title="Padrón" value={metrics.padron} description="Estudiantes habilitados" />
+        <SummaryCard title="Padrón" value={metrics.padron} description="Electores inscritos en la elección" />
         <SummaryCard title="Frentes" value={metrics.frentes} description="Frentes registrados" />
         <SummaryCard title="Candidatos" value={metrics.candidatos} description="Candidatos registrados" />
         <SummaryCard title="Estado" value={metrics.estado} description="Elección" />

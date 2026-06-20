@@ -37,6 +37,14 @@ export class Elector {
   @Column('text', { nullable: false, unique: true })
   registro: string;
 
+  /**
+   * Cod.Docente cuando la persona también tiene registro estudiantil.
+   * Permite login con cualquiera de los dos códigos.
+   */
+  @Index({ unique: true })
+  @Column('text', { nullable: true, unique: true })
+  registroDocente: string | null;
+
   /** Nombre(s) del elector. */
   @Column('text', { nullable: false })
   nombre: string;
@@ -56,6 +64,18 @@ export class Elector {
   /** Carrera o departamento al que pertenece el elector. */
   @Column('text', { nullable: false })
   carrera: string;
+
+  /** Facultad universitaria a la que pertenece el elector. */
+  @Column('text', { nullable: false, default: '' })
+  facultad: string;
+
+  /** Código institucional de la facultad (Cod.Fac.). */
+  @Column('text', { nullable: true })
+  codFacultad: string | null;
+
+  /** Código de carrera/plan (CARR-PL); solo aplica a estudiantes. */
+  @Column('text', { nullable: true })
+  codCarrera: string | null;
 
   @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;

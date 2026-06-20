@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -112,6 +113,19 @@ export class EleccionesController {
     @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
     @UploadedFile() file: Express.Multer.File,
   ): Promise<ApiResponse<any>> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Debe adjuntar un archivo Excel (.xlsx) en el campo "file".');
+    }
+
+    const nombreArchivo = file.originalname?.toLowerCase() ?? '';
+    const esXlsx =
+      nombreArchivo.endsWith('.xlsx') ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+    if (!esXlsx) {
+      throw new BadRequestException('El archivo debe tener formato .xlsx.');
+    }
+
     return this.padronService.cargarPadronElectoral(eleccionId, file.buffer);
   }
 

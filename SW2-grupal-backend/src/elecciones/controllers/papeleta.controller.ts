@@ -1,4 +1,4 @@
-import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { PapeletaDigital, PapeletaService } from 'src/elecciones/services/papeleta.service';
 
 /**
@@ -11,12 +11,14 @@ export class PapeletaController {
   /**
    * Obtiene la papeleta completa jerárquica de una elección.
    * @param eleccionId Identificador UUID de la eleccion.
+   * @param registro Registro universitario opcional para filtrar cargos según elegibilidad (ej. Rector).
    * @returns Papeleta digital anidada.
    */
   @Get(':eleccionId/papeleta')
   async obtenerPapeletaDigital(
     @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+    @Query('registro') registro?: string,
   ): Promise<PapeletaDigital> {
-    return this.papeletaService.obtenerPapeletaDigital(eleccionId);
+    return this.papeletaService.obtenerPapeletaDigital(eleccionId, registro);
   }
 }

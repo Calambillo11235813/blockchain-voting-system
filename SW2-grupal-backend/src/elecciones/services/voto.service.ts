@@ -102,13 +102,25 @@ export class VotoService {
     // 5. Verificar que el candidato exista y pertenezca a la elección (CU-12)
     const candidato = await this.candidatoRepository.findOne({
       where: { id: candidatoId },
-      relations: ['frente', 'frente.eleccionCargo', 'frente.eleccionCargo.eleccion'],
+      relations: [
+        'frente',
+        'frente.eleccionCargo',
+        'frente.eleccionCargo.eleccion',
+        'frente.eleccionCargo.cargo',
+      ],
     });
     if (!candidato) {
       throw new NotFoundException(`No se encontró el candidato con id ${candidatoId}.`);
     }
     if (candidato.frente.eleccionCargo.eleccion.id !== eleccionId) {
       throw new BadRequestException('El candidato no pertenece a la elección especificada.');
+    }
+
+    const cargoNombre = candidato.frente.eleccionCargo.cargo?.nombre?.trim().toUpperCase() ?? '';
+    if (cargoNombre === 'RECTOR' && !entradaPadron.habilitadoRector) {
+      throw new ForbiddenException(
+        'El elector no está habilitado para votar por el cargo de Rector en esta elección.',
+      );
     }
 
     // 6. Obtener la llave privada de la Wallet Institucional (Firma en backend)

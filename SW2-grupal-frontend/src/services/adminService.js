@@ -1,33 +1,46 @@
 import { api } from './api'
 
 /**
- * Sube la whitelist/padrón de estudiantes como archivo para una elección específica.
+ * @typedef {{
+ *   totalProcesado: number,
+ *   estudiantesProcesados: number,
+ *   docentesProcesados: number,
+ *   electoresInsertados: number,
+ *   electoresActualizados: number,
+ *   registrosHabilitados: number,
+ *   erroresEstructurales: string[],
+ * }} ResultadoCargaPadron
+ */
+
+/**
+ * @typedef {{
+ *   statusCode: number,
+ *   data: ResultadoCargaPadron | null,
+ *   message?: string,
+ *   errors?: string[],
+ *   metadata?: Record<string, unknown>,
+ * }} ApiResponsePadronUpload
+ */
+
+/**
+ * Sube el padrón electoral como archivo Excel para una elección específica.
  *
- * @param {string} eleccionId UUID de la elección a la que pertenece el padrón.
- * @param {File} file Archivo `.xlsx`.
- * @returns {Promise<any>} Respuesta del backend.
+ * @param {string} eleccionId UUID de la elección destino.
+ * @param {File} file Archivo `.xlsx` con hojas Estudiantes y/o Docentes.
+ * @returns {Promise<ApiResponsePadronUpload>}
  */
 export async function uploadWhitelistFile(eleccionId, file) {
   const formData = new FormData()
   formData.append('file', file)
 
-  const response = await api.post(`/elecciones/${eleccionId}/padron`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  })
-
+  const response = await api.post(`/elecciones/${eleccionId}/padron`, formData)
   return response.data
 }
 
 /**
- * Sube la whitelist como lista (array) de estudiantes.
- *
- * Importante: Este método asume que el backend expone un endpoint JSON.
- * Si tu backend solo soporta `.xlsx`, usa `uploadWhitelistFile`.
- *
- * @param {Array<Record<string, any>>} students Lista de estudiantes.
- * @returns {Promise<any>} Respuesta del backend.
+ * @deprecated Usar uploadWhitelistFile con archivo Excel dual-sheet.
+ * @param {Array<Record<string, unknown>>} students
+ * @returns {Promise<unknown>}
  */
 export async function uploadWhitelistArray(students) {
   const response = await api.post('/estudiantes/whitelist', {
@@ -38,20 +51,20 @@ export async function uploadWhitelistArray(students) {
 }
 
 /**
- * Obtiene la lista de electores del padrón electoral para una elección específica.
+ * Obtiene la lista de electores del padrón electoral para una elección.
  *
  * @param {string} eleccionId UUID de la elección.
- * @param {number} page Número de página (1-indexed).
- * @param {number} limit Límite de registros por página.
- * @param {string} [estamento] Filtro opcional por estamento ('DOCENTE' o 'ESTUDIANTE').
- * @returns {Promise<any>} Respuesta del backend con los datos de paginación.
+ * @param {number} [page=1]
+ * @param {number} [limit=50]
+ * @param {string} [estamento] 'DOCENTE' | 'ESTUDIANTE'
+ * @returns {Promise<import('./electionsService').ApiResponse>}
  */
 export async function fetchPadronElectoral(eleccionId, page = 1, limit = 50, estamento = '') {
   const params = { page, limit }
   if (estamento) {
     params.estamento = estamento
   }
-  
+
   const response = await api.get(`/elecciones/${eleccionId}/padron`, {
     params,
   })

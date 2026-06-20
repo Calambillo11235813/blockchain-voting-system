@@ -1,36 +1,23 @@
 import { BadRequestException, ForbiddenException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import * as XLSX from 'xlsx';
 import { PadronElectoral } from '../entities/padron-electoral.entity';
 import { Eleccion } from '../entities/eleccion.entity';
 import { RegistroSufragio } from '../entities/registro-sufragio.entity';
 import { Elector, EstamentoEnum } from '../../electores/entities/elector.entity';
 import { ApiResponse, createApiResponse } from '../../compartido/respuesta';
-
-// ─── Interfaces internas de parsing ───────────────────────────────────────────
-
-/** Fila normalizada tras el parsing del archivo Excel. */
-interface ElectorExcelRow {
-  registro: string;
-  ci: string;
-  nombre: string;
-  apellido: string;
-  estamento: EstamentoEnum;
-  carrera: string;
-}
-
-/** Fila parseada con metadatos de trazabilidad. */
-interface ElectorExcelParsedRow extends ElectorExcelRow {
-  /** Número de fila original en el Excel (para mensajes de error). */
-  __rowNumber: number;
-}
+import { parsePadronExcelBuffer } from './padron/padron-excel.parser';
+import { FilaPadronNormalizada } from './padron/padron-excel.schemas';
+import { validateNoDuplicatesPadron } from './padron/padron-excel.validators';
+import { fusionarFilasDualRol } from './padron/padron-excel.merger';
 
 // ─── Interfaces de resultado ──────────────────────────────────────────────────
 
 /** Estadísticas devueltas tras la carga masiva del padrón electoral. */
 export interface ResultadoCargaPadron {
   totalProcesado: number;
+  estudiantesProcesados: number;
+  docentesProcesados: number;
   electoresInsertados: number;
   electoresActualizados: number;
   registrosHabilitados: number;
@@ -47,24 +34,6 @@ export interface ResultadoCargaPadron {
  */
 @Injectable()
 export class PadronService {
-  /**
-   * Cabeceras admitidas en el archivo Excel.
-   * Se acepta tanto la forma singular como la plural para nombre/apellido.
-   */
-  private static readonly HEADER_ALIASES: Record<string, string> = {
-    registro: 'registro',
-    ci: 'ci',
-    nombre: 'nombre',
-    nombres: 'nombre',
-    apellido: 'apellido',
-    apellidos: 'apellido',
-    estamento: 'estamento',
-    carrera: 'carrera',
-  };
-
-  /** Columnas obligatorias después de la normalización de aliases. */
-  private static readonly REQUIRED_COLUMNS = ['registro', 'ci', 'nombre', 'apellido', 'carrera'];
-
   constructor(
     @InjectRepository(PadronElectoral)
     private readonly padronElectoralRepository: Repository<PadronElectoral>,
@@ -108,7 +77,12 @@ export class PadronService {
     }
 
     // ── 1. Parsing y validación estructural ───────────────────────────────
-    const { rows, errors: erroresEstructurales } = this.parseExcelBuffer(archivo);
+    const {
+      rows,
+      errors: erroresEstructurales,
+      estudiantesProcesados,
+      docentesProcesados,
+    } = parsePadronExcelBuffer(archivo);
 
     if (rows.length === 0) {
       throw new BadRequestException(
@@ -119,22 +93,19 @@ export class PadronService {
     }
 
     // ── 2. Validar duplicados internos del archivo ────────────────────────
-    const duplicateErrors = this.validateNoDuplicates(rows);
+    const duplicateErrors = validateNoDuplicatesPadron(rows);
     if (duplicateErrors.length > 0) {
       throw new BadRequestException(
         `El archivo contiene filas duplicadas:\n${duplicateErrors.map(e => `- ${e}`).join('\n')}`,
       );
     }
 
+    // ── 2b. Fusionar docentes que también son estudiantes (misma CI) ───────
+    const { rows: filasFusionadas, advertencias: advertenciasDualRol } = fusionarFilasDualRol(rows);
+    const erroresConAdvertencias = [...erroresEstructurales, ...advertenciasDualRol];
+
     // ── 3. Normalizar datos ───────────────────────────────────────────────
-    const normalizedRows = rows.map(row => ({
-      ...row,
-      registro: row.registro.trim(),
-      ci: row.ci.trim(),
-      nombre: row.nombre.trim(),
-      apellido: row.apellido.trim(),
-      carrera: row.carrera.trim(),
-    }));
+    const normalizedRows = filasFusionadas.map(row => this.normalizarFila(row));
 
     // ── 4. Ejecutar transacción atómica ───────────────────────────────────
     let electoresInsertados = 0;
@@ -149,22 +120,32 @@ export class PadronService {
       //  FASE A — Gestión del catálogo global (Elector)
       // ═══════════════════════════════════════════════════════════════════
 
-      const registrosUnicos = [...new Set(normalizedRows.map(r => r.registro))];
+      const registrosUnicos = [
+        ...new Set([
+          ...normalizedRows.map(r => r.registro),
+          ...normalizedRows.flatMap(r => (r.registroDocente ? [r.registroDocente] : [])),
+        ]),
+      ];
       const cisUnicos = [...new Set(normalizedRows.map(r => r.ci))];
 
       // A.1 — Consultar electores existentes por registro (para contar inserts vs updates)
-      const existentesPorRegistro = registrosUnicos.length > 0
-        ? new Map(
-          (await electorRepo
-            .createQueryBuilder('e')
-            .where('e.registro IN (:...registros)', { registros: registrosUnicos })
-            .getMany()
-          ).map(e => [e.registro, e]),
-        )
-        : new Map<string, Elector>();
+      const existentesPorRegistro = new Map<string, Elector>();
+      if (registrosUnicos.length > 0) {
+        const existentes = await electorRepo
+          .createQueryBuilder('e')
+          .where('e.registro IN (:...registros)', { registros: registrosUnicos })
+          .orWhere('e.registroDocente IN (:...registros)', { registros: registrosUnicos })
+          .getMany();
+
+        for (const e of existentes) {
+          existentesPorRegistro.set(e.registro, e);
+          if (e.registroDocente) {
+            existentesPorRegistro.set(e.registroDocente, e);
+          }
+        }
+      }
 
       // A.2 — Validar colisiones cruzadas CI ↔ Registro
-      //   Evitar que un registro intente tomar un CI que ya pertenece a otro elector.
       if (cisUnicos.length > 0) {
         const existentesPorCi = await electorRepo
           .createQueryBuilder('e')
@@ -179,8 +160,17 @@ export class PadronService {
           const otroPorCi = byCi.get(row.ci);
           if (otroPorCi && otroPorCi.registro !== row.registro) {
             conflicts.push(
-              `Fila ${row.__rowNumber}: el CI '${row.ci}' ya pertenece al registro '${otroPorCi.registro}'.`,
+              `Hoja ${row.__sheetName}, Fila ${row.__rowNumber}: el CI '${row.ci}' ya pertenece al registro '${otroPorCi.registro}'.`,
             );
+          }
+
+          if (row.registroDocente) {
+            const otroPorRegistroDocente = existentesPorRegistro.get(row.registroDocente);
+            if (otroPorRegistroDocente && otroPorRegistroDocente.ci !== row.ci) {
+              conflicts.push(
+                `Cod. docente '${row.registroDocente}' ya pertenece a otra persona (CI '${otroPorRegistroDocente.ci}').`,
+              );
+            }
           }
         }
 
@@ -202,8 +192,19 @@ export class PadronService {
 
       // A.4 — Upsert masivo en tabla `electores` por registro
       const electorEntities = normalizedRows.map(row => {
-        const { __rowNumber: _, ...data } = row;
-        return electorRepo.create(data);
+        const entity = electorRepo.create({
+          registro: row.registro,
+          registroDocente: row.registroDocente ?? null,
+          ci: row.ci,
+          nombre: row.nombre,
+          apellido: row.apellido,
+          estamento: row.estamento,
+          carrera: row.carrera,
+          facultad: row.facultad,
+          codFacultad: row.codFacultad,
+          codCarrera: row.codCarrera ?? null,
+        });
+        return entity;
       });
 
       try {
@@ -233,7 +234,6 @@ export class PadronService {
       //  FASE B — Vinculación a la Elección (PadronElectoral)
       // ═══════════════════════════════════════════════════════════════════
 
-      // B.1 — Recuperar los UUIDs reales de la BD para los registros procesados
       const electoresDb = await electorRepo.find({
         where: { registro: In(registrosUnicos) },
         select: ['id', 'registro'],
@@ -241,12 +241,10 @@ export class PadronService {
 
       const mapaRegistroId = new Map(electoresDb.map(e => [e.registro, e.id]));
 
-      // B.2 — Construir entidades de PadronElectoral
       const padronEntities: PadronElectoral[] = [];
       for (const row of normalizedRows) {
         const dbElectorId = mapaRegistroId.get(row.registro);
         if (!dbElectorId) {
-          // Caso defensivo: no debería ocurrir tras el upsert exitoso.
           continue;
         }
 
@@ -254,11 +252,13 @@ export class PadronService {
           eleccion: { id: eleccionId } as Eleccion,
           elector: { id: dbElectorId } as Elector,
           estaHabilitado: true,
+          codLugar: row.codLugar,
+          lugarVotacion: row.lugarVotacion,
+          habilitadoRector: row.habilitadoRector,
         });
         padronEntities.push(entry);
       }
 
-      // B.3 — Upsert masivo en padron_electoral por constraint compuesto
       if (padronEntities.length > 0) {
         await padronRepo.upsert(padronEntities, {
           conflictPaths: ['eleccion', 'elector'],
@@ -269,15 +269,16 @@ export class PadronService {
       registrosHabilitados = padronEntities.length;
     });
 
-    // ── 5. Retornar estadísticas ──────────────────────────────────────────
     return createApiResponse(
       HttpStatus.OK,
       {
         totalProcesado: normalizedRows.length,
+        estudiantesProcesados,
+        docentesProcesados,
         electoresInsertados,
         electoresActualizados,
         registrosHabilitados,
-        erroresEstructurales,
+        erroresEstructurales: erroresConAdvertencias,
       },
       'Padrón electoral cargado correctamente.',
     );
@@ -285,11 +286,6 @@ export class PadronService {
 
   /**
    * RF1 · Lista los electores del padrón de una elección con paginación.
-   *
-   * @param eleccionId  UUID de la elección.
-   * @param page        Número de página (1-indexed, default 1).
-   * @param limit       Registros por página (default 50).
-   * @returns Lista paginada de registros del padrón con datos del elector.
    */
   async listarPadronElectoral(
     eleccionId: string,
@@ -307,7 +303,7 @@ export class PadronService {
 
     const skip = (page - 1) * limit;
 
-    const whereClause: any = { eleccion: { id: eleccionId } };
+    const whereClause: Record<string, unknown> = { eleccion: { id: eleccionId } };
     if (estamento) {
       whereClause.elector = { estamento };
     }
@@ -331,18 +327,13 @@ export class PadronService {
         total,
         page,
         limit,
-      }
+      },
     );
   }
 
   /**
    * RF1 · Habilita o deshabilita un elector individual dentro del padrón
    * de una elección específica (toggle booleano).
-   *
-   * @param eleccionId  UUID de la elección.
-   * @param electorId   UUID del elector a modificar.
-   * @returns Registro del padrón actualizado.
-   * @throws NotFoundException si la combinación elección-elector no existe.
    */
   async toggleHabilitacionElector(
     eleccionId: string,
@@ -355,31 +346,12 @@ export class PadronService {
   //  RF6 — VALIDACIÓN DE ACCESO DEL VOTANTE
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * RF6 · Verifica que un elector está habilitado en el padrón de la
-   * elección activa y puede ejercer su derecho al voto.
-   *
-   * Validaciones:
-   * 1. El elector existe en el sistema (búsqueda por registro universitario).
-   * 2. El elector pertenece al padrón de la elección indicada.
-   * 3. El elector está habilitado (`estaHabilitado = true`).
-   * 4. El elector no ha votado previamente (sin RegistroSufragio existente).
-   *
-   * @param registro    Número de registro universitario del elector.
-   * @param eleccionId  UUID de la elección activa.
-   * @returns Datos del elector si pasa todas las validaciones.
-   * @throws NotFoundException si el elector no existe o no está en el padrón.
-   * @throws ForbiddenException si no está habilitado o ya votó.
-   */
   async validarAccesoVotante(
     registro: string,
     eleccionId: string,
   ): Promise<ApiResponse<Elector>> {
-    // ── Validación 1: Existencia global del elector ───────────────────────
-    // Busca al elector en el catálogo maestro por su número de registro.
-    // Si no existe en absoluto, no tiene sentido continuar las demás validaciones.
     const elector = await this.electorRepository.findOne({
-      where: { registro },
+      where: [{ registro }, { registroDocente: registro }],
     });
 
     if (!elector) {
@@ -388,10 +360,6 @@ export class PadronService {
       );
     }
 
-    // ── Validación 2: Pertenencia al padrón de la elección ────────────────
-    // Verifica que el elector fue cargado en la whitelist de ESTA elección
-    // específica. Un elector puede existir en el catálogo global pero no
-    // estar habilitado para el comicio en curso.
     const entradaPadron = await this.padronElectoralRepository.findOne({
       where: {
         eleccion: { id: eleccionId },
@@ -406,21 +374,12 @@ export class PadronService {
       );
     }
 
-    // ── Validación 3: Estado de habilitación ──────────────────────────────
-    // El administrador puede revocar individualmente la habilitación de un
-    // elector antes de que inicie la jornada (ej. bajas, errores de carga).
     if (!entradaPadron.estaHabilitado) {
       throw new ForbiddenException(
         `El elector con registro '${registro}' ha sido inhabilitado para esta elección.`,
       );
     }
 
-    // ── Validación 4: Doble voto (Removido) ────────────────────────────────
-    // Ya no bloqueamos el login si el elector ya votó, para permitir que 
-    // el frontend lo redirija al panel de estadísticas y descarga de certificado.
-    // La protección contra doble voto se mantiene firmemente en voto.service.ts.
-
-    // ── Acceso concedido ─────────────────────────────────────────────────
     return createApiResponse(
       HttpStatus.OK,
       elector,
@@ -429,165 +388,24 @@ export class PadronService {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  MÉTODOS PRIVADOS — PARSING EXCEL
+  //  MÉTODOS PRIVADOS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Parsea un buffer Excel y valida cabeceras y filas.
-   * Acepta variaciones en los nombres de columnas (nombre/nombres, apellido/apellidos).
-   *
-   * @param buffer  Buffer del archivo .xlsx.
-   * @returns Filas válidas y lista de errores estructurales.
-   * @throws BadRequestException si el archivo está vacío o no tiene cabeceras reconocibles.
-   */
-  private parseExcelBuffer(buffer: Buffer): { rows: ElectorExcelParsedRow[]; errors: string[] } {
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-
-    if (!sheetName) {
-      throw new BadRequestException('El archivo no contiene hojas.');
-    }
-
-    const sheet = workbook.Sheets[sheetName];
-    const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' });
-
-    if (raw.length === 0) {
-      throw new BadRequestException('El archivo no contiene cabeceras.');
-    }
-
-    // ── Normalizar cabeceras con aliases ──────────────────────────────────
-    const headerRow = (raw[0] as Array<unknown>).map(cell =>
-      String(cell).trim().toLowerCase(),
-    );
-
-    const columnMap = new Map<string, number>();
-    for (let i = 0; i < headerRow.length; i++) {
-      const alias = PadronService.HEADER_ALIASES[headerRow[i]];
-      if (alias && !columnMap.has(alias)) {
-        columnMap.set(alias, i);
-      }
-    }
-
-    // Validar que todas las columnas obligatorias estén presentes
-    const missingHeaders = PadronService.REQUIRED_COLUMNS.filter(col => !columnMap.has(col));
-    if (missingHeaders.length > 0) {
-      throw new BadRequestException(
-        `Cabeceras faltantes o no reconocidas: ${missingHeaders.join(', ')}. ` +
-        `Se aceptan: ${Object.keys(PadronService.HEADER_ALIASES).join(', ')}.`,
-      );
-    }
-
-    // ── Parsear filas ────────────────────────────────────────────────────
-    const errors: string[] = [];
-    const rows: ElectorExcelParsedRow[] = [];
-
-    for (let i = 1; i < raw.length; i++) {
-      const rawRow = raw[i] as Array<unknown>;
-
-      const getValue = (col: string): string =>
-        String(rawRow[columnMap.get(col)!] ?? '').trim();
-
-      const registro = getValue('registro');
-      const ci = getValue('ci');
-      const nombre = getValue('nombre');
-      const apellido = getValue('apellido');
-      const carrera = getValue('carrera');
-
-      // Saltar filas completamente vacías
-      const hasAnyValue = [registro, ci, nombre, apellido, carrera].some(v => v.length > 0);
-      if (!hasAnyValue) {
-        continue;
-      }
-
-      // Validar campos obligatorios
-      const missing: string[] = [];
-      if (!registro) missing.push('registro');
-      if (!ci) missing.push('ci');
-      if (!nombre) missing.push('nombre');
-      if (!apellido) missing.push('apellido');
-      if (!carrera) missing.push('carrera');
-
-      if (missing.length > 0) {
-        errors.push(`Fila ${i + 1}: faltan ${missing.join(', ')}`);
-        continue;
-      }
-
-      // Gestión de estamento: leer del Excel o asumir ESTUDIANTE por defecto
-      let estamento = EstamentoEnum.ESTUDIANTE;
-      if (columnMap.has('estamento')) {
-        const rawEstamento = getValue('estamento').toUpperCase();
-        if (rawEstamento === 'DOCENTE') {
-          estamento = EstamentoEnum.DOCENTE;
-        } else if (rawEstamento && rawEstamento !== 'ESTUDIANTE') {
-          errors.push(`Fila ${i + 1}: estamento '${rawEstamento}' no reconocido (usar ESTUDIANTE o DOCENTE)`);
-          continue;
-        }
-      }
-
-      rows.push({
-        registro,
-        ci,
-        nombre,
-        apellido,
-        estamento,
-        carrera,
-        __rowNumber: i + 1,
-      });
-    }
-
-    return { rows, errors };
-  }
-
-  /**
-   * Valida que no existan duplicados internos en el archivo Excel
-   * para los campos de unicidad (registro, ci).
-   *
-   * @param rows  Filas parseadas del archivo.
-   * @returns Lista de mensajes de error por duplicados encontrados.
-   */
-  private validateNoDuplicates(rows: ElectorExcelParsedRow[]): string[] {
-    const errors: string[] = [];
-
-    const byRegistro = new Map<string, number[]>();
-    const byCi = new Map<string, number[]>();
-
-    for (const row of rows) {
-      const reg = row.registro;
-      const ci = row.ci;
-
-      if (!byRegistro.has(reg)) byRegistro.set(reg, []);
-      byRegistro.get(reg)!.push(row.__rowNumber);
-
-      if (!byCi.has(ci)) byCi.set(ci, []);
-      byCi.get(ci)!.push(row.__rowNumber);
-    }
-
-    const collect = (label: string, map: Map<string, number[]>) => {
-      for (const [value, rowNumbers] of map.entries()) {
-        if (rowNumbers.length > 1) {
-          const sorted = rowNumbers.slice().sort((a, b) => a - b);
-          errors.push(`${label} '${value}' repetido en filas ${sorted.join(', ')}`);
-        }
-      }
+  private normalizarFila(row: FilaPadronNormalizada): FilaPadronNormalizada {
+    return {
+      ...row,
+      registro: row.registro.trim(),
+      ci: row.ci.trim(),
+      nombre: row.nombre.trim(),
+      apellido: row.apellido.trim(),
+      carrera: row.carrera.trim(),
+      facultad: row.facultad.trim(),
+      codFacultad: row.codFacultad.trim(),
+      codLugar: row.codLugar.trim(),
+      lugarVotacion: row.lugarVotacion.trim(),
     };
-
-    collect('registro', byRegistro);
-    collect('ci', byCi);
-
-    return errors;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  MÉTODOS PRIVADOS — UTILIDADES
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Extrae de forma segura el código y detalle de un error nativo de PostgreSQL.
-   * Navega tanto el error directo como el `driverError` encapsulado por TypeORM.
-   *
-   * @param error  Error capturado en el bloque catch.
-   * @returns Objeto con el código y el detalle (si existen).
-   */
   private obtenerDetalleErrorPostgres(error: unknown): { code?: string; detail?: string } {
     if (typeof error !== 'object' || error === null) {
       return {};
