@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 import { Administrador } from '../../administradores/entities/administrador.entity';
 import { EleccionCargo } from './eleccion-cargo.entity';
+import { Frente } from './frente.entity';
 
 /**
  * Entidad que representa un proceso electoral (comicio) en la UAGRM.
@@ -52,8 +53,12 @@ export class Eleccion {
 
   /**
    * Instancias de Cargo-en-esta-Elección (patrón Clase Asociación).
-   * Cada EleccionCargo agrupa los frentes que compiten por un cargo específico.
+   * Cada EleccionCargo representa una papeleta/sub-elección del proceso.
    */
   @OneToMany(() => EleccionCargo, (ec) => ec.eleccion, { cascade: false })
   eleccionCargos: EleccionCargo[];
+
+  /** Frentes / coaliciones registrados en este proceso electoral. */
+  @OneToMany(() => Frente, (frente) => frente.eleccion, { cascade: false })
+  frentes: Frente[];
 }

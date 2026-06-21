@@ -15,10 +15,13 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { EleccionesLegacyService } from '../services/elecciones.service';
 import { PadronService } from '../services/padron.service';
+import { FrenteService } from '../services/frente.service';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { Eleccion } from '../entities/eleccion.entity';
+import { Frente } from '../entities/frente.entity';
 import { CrearEleccionDto } from '../dto/eleccion/crear-eleccion.dto';
 import { ActualizarEleccionDto } from '../dto/eleccion/actualizar-eleccion.dto';
+import { CrearFrenteDto } from '../dto/frente/crear-frente.dto';
 
 /**
  * Controlador del dominio de elecciones facultativas.
@@ -28,6 +31,7 @@ export class EleccionesController {
   constructor(
     private readonly eleccionesService: EleccionesLegacyService,
     private readonly padronService: PadronService,
+    private readonly frenteService: FrenteService,
   ) {}
 
   /**
@@ -102,6 +106,27 @@ export class EleccionesController {
   }
 
   /**
+   * Registra un frente en un proceso electoral (modelo nuevo).
+   */
+  @Post(':eleccionId/frentes')
+  async registrarFrentePorEleccion(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+    @Body() crearFrenteDto: CrearFrenteDto,
+  ): Promise<ApiResponse<Frente>> {
+    return this.frenteService.registrarFrentePorEleccion(eleccionId, crearFrenteDto);
+  }
+
+  /**
+   * Lista los frentes de un proceso electoral.
+   */
+  @Get(':eleccionId/frentes')
+  async listarFrentesPorEleccion(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<Frente[]>> {
+    return this.frenteService.listarFrentesPorEleccion(eleccionId);
+  }
+
+  /**
    * Carga masiva del padrón electoral desde un archivo Excel (.xlsx).
    * @param eleccionId Identificador UUID de la eleccion.
    * @param file Archivo Excel subido.
@@ -127,6 +152,27 @@ export class EleccionesController {
     }
 
     return this.padronService.cargarPadronElectoral(eleccionId, file.buffer);
+  }
+
+  /**
+   * Catálogo de facultades distintas del padrón habilitado (para configurar papeletas).
+   */
+  @Get(':eleccionId/catalogo/facultades')
+  async listarFacultadesPadron(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<Array<{ codFacultad: string; facultadNombre: string }>>> {
+    return this.padronService.obtenerFacultadesDePadron(eleccionId);
+  }
+
+  /**
+   * Catálogo de carreras del padrón habilitado filtradas por facultad.
+   */
+  @Get(':eleccionId/catalogo/carreras')
+  async listarCarrerasPadron(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+    @Query('codFacultad') codFacultad: string,
+  ): Promise<ApiResponse<Array<{ codCarrera: string; carreraNombre: string }>>> {
+    return this.padronService.obtenerCarrerasDePadron(eleccionId, codFacultad);
   }
 
   /**

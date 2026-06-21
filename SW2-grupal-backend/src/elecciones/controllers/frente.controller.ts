@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { FrenteService } from 'src/elecciones/services/frente.service';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { Frente } from 'src/elecciones/entities/frente.entity';
@@ -39,12 +39,13 @@ export class FrenteController {
   }
 
   /**
-   * Lista todos los frentes a nivel global.
-   * @returns Lista de frentes.
+   * Lista todos los frentes a nivel global, opcionalmente filtrados por elección.
    */
   @Get('lista')
-  async listarFrentes(): Promise<ApiResponse<Frente[]>> {
-    return this.frenteService.listarFrentes();
+  async listarFrentes(
+    @Query('eleccionId') eleccionId?: string,
+  ): Promise<ApiResponse<Frente[]>> {
+    return this.frenteService.listarFrentes(eleccionId);
   }
 
   /**

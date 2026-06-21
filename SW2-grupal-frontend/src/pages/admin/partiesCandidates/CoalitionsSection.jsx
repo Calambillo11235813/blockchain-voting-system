@@ -16,7 +16,8 @@ import {
 /**
  * Gestión de Frentes.
  * @param {{
- *  positions: any[]
+ *  eleccionId: string
+ *  eleccionLabel: string
  *  coalitions: any[]
  *  setCoalitions: (value: any[]) => void
  *  isLoading: boolean
@@ -29,7 +30,8 @@ import {
  * @returns {import('react').JSX.Element}
  */
 export default function CoalitionsSection({
-  positions,
+  eleccionId,
+  eleccionLabel,
   coalitions,
   setCoalitions,
   isLoading,
@@ -43,17 +45,27 @@ export default function CoalitionsSection({
   const [coalitionForm, setCoalitionForm] = useState(() => ({
     nombreFrente: '',
     sigla: '',
-    cargoId: '',
     logoFile: null,
     logoPreview: '',
     existingLogoUrl: '',
   }))
 
+  const resetCoalitionForm = () => ({
+    nombreFrente: '',
+    sigla: '',
+    logoFile: null,
+    logoPreview: '',
+    existingLogoUrl: '',
+  })
+
   const handleCreateFrente = async () => {
     setErrorMessage('')
     setSuccessMessage('')
 
-    const validationError = validateCoalitionForm(coalitionForm)
+    const validationError = validateCoalitionForm({
+      ...coalitionForm,
+      eleccionId,
+    })
     if (validationError) {
       setErrorMessage(validationError)
       return
@@ -69,31 +81,23 @@ export default function CoalitionsSection({
         await updateFrente(editingCoalitionId, {
           nombreFrente: coalitionForm.nombreFrente.trim(),
           sigla: coalitionForm.sigla.trim().toUpperCase(),
-          cargoId: coalitionForm.cargoId,
           ...(logoUrl ? { logoUrl } : {}),
         })
         setSuccessMessage('Actualización exitosa')
       } else {
         await createFrente({
+          eleccionId,
           nombreFrente: coalitionForm.nombreFrente.trim(),
           sigla: coalitionForm.sigla.trim().toUpperCase(),
-          cargoId: coalitionForm.cargoId,
           ...(logoUrl ? { logoUrl } : {}),
         })
         setSuccessMessage('Registro exitoso')
       }
 
-      const updatedFrentes = await fetchFrentes()
+      const updatedFrentes = await fetchFrentes(eleccionId)
       setCoalitions(updatedFrentes)
       setEditingCoalitionId('')
-      setCoalitionForm({
-        nombreFrente: '',
-        sigla: '',
-        cargoId: '',
-        logoFile: null,
-        logoPreview: '',
-        existingLogoUrl: '',
-      })
+      setCoalitionForm(resetCoalitionForm())
     } catch {
       setErrorMessage('Hubo un problema al guardar el frente. Inténtelo más tarde.')
     } finally {
@@ -108,7 +112,6 @@ export default function CoalitionsSection({
     setCoalitionForm({
       nombreFrente: coalition.nombreFrente || '',
       sigla: coalition.sigla || '',
-      cargoId: coalition?.eleccionCargoId || '',
       logoFile: null,
       logoPreview: coalition.logoUrl || '',
       existingLogoUrl: coalition.logoUrl || '',
@@ -120,20 +123,13 @@ export default function CoalitionsSection({
     setSuccessMessage('')
     try {
       await deleteFrente(coalitionId)
-      const updatedFrentes = await fetchFrentes()
+      const updatedFrentes = await fetchFrentes(eleccionId)
       setCoalitions(updatedFrentes)
       setSuccessMessage('Eliminación exitosa')
 
       if (editingCoalitionId === coalitionId) {
         setEditingCoalitionId('')
-        setCoalitionForm({
-          nombreFrente: '',
-          sigla: '',
-          cargoId: '',
-          logoFile: null,
-          logoPreview: '',
-          existingLogoUrl: '',
-        })
+        setCoalitionForm(resetCoalitionForm())
       }
     } catch {
       setErrorMessage('No se pudo eliminar el frente. Inténtelo más tarde.')
@@ -164,7 +160,10 @@ export default function CoalitionsSection({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-base font-semibold text-blue-900">Gestión de Frentes</h3>
-          <p className="mt-1 text-sm text-slate-700">Visualiza y registra frentes por cargo.</p>
+          <p className="mt-1 text-sm text-slate-700">
+            Registra frentes para el proceso:{' '}
+            <span className="font-semibold text-slate-900">{eleccionLabel || '—'}</span>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {editingCoalitionId ? (
@@ -174,14 +173,7 @@ export default function CoalitionsSection({
                 setErrorMessage('')
                 setSuccessMessage('')
                 setEditingCoalitionId('')
-                setCoalitionForm({
-                  nombreFrente: '',
-                  sigla: '',
-                  cargoId: '',
-                  logoFile: null,
-                  logoPreview: '',
-                  existingLogoUrl: '',
-                })
+                setCoalitionForm(resetCoalitionForm())
               }}
               disabled={isBusy}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -228,22 +220,6 @@ export default function CoalitionsSection({
           />
         </Field>
 
-        <Field label="Cargo">
-          <select
-            value={coalitionForm.cargoId}
-            onChange={(e) => setCoalitionForm((prev) => ({ ...prev, cargoId: e.target.value }))}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            disabled={isBusy}
-          >
-            <option value="">Seleccione un cargo</option>
-            {positions.map((position) => (
-              <option key={position.id} value={position.eleccionCargoId || ''}>
-                {position.nombre}
-              </option>
-            ))}
-          </select>
-        </Field>
-
         <Field label="Logo (opcional)">
           <div className="flex items-center gap-3">
             <input
@@ -275,7 +251,7 @@ export default function CoalitionsSection({
             <tr>
               <Th>Frente</Th>
               <Th>Sigla</Th>
-              <Th>Cargo</Th>
+              <Th>Elección</Th>
               <Th>Logo</Th>
               <Th>
                 <span className="block text-center">Acciones</span>
@@ -292,7 +268,7 @@ export default function CoalitionsSection({
             ) : coalitions.length === 0 ? (
               <tr>
                 <td className="px-4 py-3 text-sm text-slate-700" colSpan={5}>
-                  No hay frentes registrados.
+                  No hay frentes registrados en este proceso electoral.
                 </td>
               </tr>
             ) : (
@@ -300,7 +276,9 @@ export default function CoalitionsSection({
                 <tr key={coalition.id}>
                   <td className="px-4 py-3 text-sm font-semibold text-slate-900">{coalition.nombreFrente}</td>
                   <td className="px-4 py-3 text-sm text-slate-700">{coalition.sigla}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{coalition?.cargo?.nombre || '—'}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {coalition?.eleccion?.titulo || eleccionLabel || '—'}
+                  </td>
                   <td className="px-4 py-3">
                     {coalition.logoUrl ? (
                       <img

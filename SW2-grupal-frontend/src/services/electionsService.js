@@ -28,15 +28,73 @@ import { api } from './api'
  */
 
 /**
- * @typedef {{ id: string, nombre: string, facultad: string, eleccion?: Election }} Position
+ * @typedef {'GLOBAL' | 'FACULTAD' | 'CARRERA'} AlcancePapeleta
  */
 
 /**
- * @typedef {{ id: string, nombreFrente: string, sigla: string, logoUrl: (string | null), cargo?: Position }} Frente
+ * @typedef {{
+ *  id: string,
+ *  nombre: string,
+ *  facultad: string,
+ *  eleccion?: Election,
+ *  eleccionCargoId?: string | null,
+ *  alcance?: AlcancePapeleta,
+ *  codFacultad?: string | null,
+ *  facultadNombre?: string | null,
+ *  codCarrera?: string | null,
+ *  carreraNombre?: string | null,
+ *  orden?: number,
+ *  estaActiva?: boolean,
+ * }} Position
  */
 
 /**
- * @typedef {{ id: string, ci: string, nombres: string, apellidos: string, fotoUrl: (string | null), frente?: Frente }} Candidate
+ * @typedef {{ codFacultad: string, facultadNombre: string }} FacultadPadron
+ */
+
+/**
+ * @typedef {{ codCarrera: string, carreraNombre: string }} CarreraPadron
+ */
+
+/**
+ * @typedef {{
+ *  id: string,
+ *  nombreFrente: string,
+ *  sigla: string,
+ *  logoUrl: (string | null),
+ *  eleccion?: Election,
+ *  eleccionId?: string | null,
+ *  candidatos?: Candidate[],
+ * }} Frente
+ */
+
+/**
+ * @typedef {{
+ *  id: string,
+ *  ci: string,
+ *  nombres: string,
+ *  apellidos: string,
+ *  fotoUrl: (string | null),
+ *  rolEspecifico?: (string | null),
+ *  frente?: Frente,
+ *  eleccionCargo?: Papeleta,
+ * }} Candidate
+ */
+
+/**
+ * @typedef {{
+ *  id: string,
+ *  cargoId?: string,
+ *  cargoNombre?: string,
+ *  nombre?: string,
+ *  alcance?: AlcancePapeleta,
+ *  codFacultad?: string | null,
+ *  facultadNombre?: string | null,
+ *  codCarrera?: string | null,
+ *  carreraNombre?: string | null,
+ *  cargo?: { id: string, nombre: string },
+ *  eleccion?: Election,
+ * }} Papeleta
  */
 
 /**
@@ -60,34 +118,38 @@ export async function fetchPositions() {
 }
 
 /**
- * Obtiene la lista de frentes.
+ * Obtiene la lista de frentes, opcionalmente filtrados por elección.
+ * @param {string} [eleccionId]
  * @returns {Promise<Frente[]>}
  */
-export async function fetchFrentes() {
+export async function fetchFrentes(eleccionId) {
+  if (eleccionId) {
+    const response = await api.get(`/elecciones/${eleccionId}/frentes`)
+    return response?.data?.data || []
+  }
   const response = await api.get('/elecciones/frente/lista')
   return response?.data?.data || []
 }
 
 /**
- * Crea un frente.
- * @param {{ nombreFrente: string, sigla: string, cargoId: string, logoUrl?: string }} payload
+ * Crea un frente en un proceso electoral.
+ * @param {{ eleccionId: string, nombreFrente: string, sigla: string, logoUrl?: string, esOpcionGlobal?: boolean }} payload
  * @returns {Promise<Frente>}
  */
 export async function createFrente(payload) {
-  const { cargoId, ...data } = payload
-  const response = await api.post(`/elecciones/frente/${cargoId}`, data)
+  const { eleccionId, ...data } = payload
+  const response = await api.post(`/elecciones/${eleccionId}/frentes`, data)
   return response?.data?.data
 }
 
 /**
  * Actualiza un frente.
  * @param {string} frenteId
- * @param {{ nombreFrente?: string, sigla?: string, cargoId?: string, logoUrl?: string }} payload
+ * @param {{ nombreFrente?: string, sigla?: string, logoUrl?: string, esOpcionGlobal?: boolean }} payload
  * @returns {Promise<Frente>}
  */
 export async function updateFrente(frenteId, payload) {
-  const { cargoId, ...data } = payload // El backend no permite actualizar el cargo asociado al frente
-  const response = await api.patch(`/elecciones/frente/${frenteId}`, data)
+  const response = await api.patch(`/elecciones/frente/${frenteId}`, payload)
   return response?.data?.data
 }
 
@@ -102,17 +164,19 @@ export async function deleteFrente(frenteId) {
 }
 
 /**
- * Obtiene la lista de candidatos.
+ * Obtiene la lista de candidatos, opcionalmente filtrados por elección.
+ * @param {string} [eleccionId]
  * @returns {Promise<Candidate[]>}
  */
-export async function fetchCandidates() {
-  const response = await api.get('/elecciones/candidato/lista')
+export async function fetchCandidates(eleccionId) {
+  const params = eleccionId ? { eleccionId } : {}
+  const response = await api.get('/elecciones/candidato/lista', { params })
   return response?.data?.data || []
 }
 
 /**
  * Crea un candidato.
- * @param {{ ci: string, nombres: string, apellidos: string, frenteId: string, fotoUrl?: string }} payload
+ * @param {{ ci: string, nombres: string, apellidos: string, frenteId: string, eleccionCargoId: string, rolEspecifico: string, fotoUrl?: string }} payload
  * @returns {Promise<Candidate>}
  */
 export async function createCandidate(payload) {
@@ -123,7 +187,7 @@ export async function createCandidate(payload) {
 /**
  * Actualiza un candidato.
  * @param {string} candidateId
- * @param {{ ci?: string, nombres?: string, apellidos?: string, frenteId?: string, fotoUrl?: string }} payload
+ * @param {{ ci?: string, nombres?: string, apellidos?: string, frenteId?: string, eleccionCargoId?: string, rolEspecifico?: string, fotoUrl?: string }} payload
  * @returns {Promise<Candidate>}
  */
 export async function updateCandidate(candidateId, payload) {
@@ -182,8 +246,40 @@ export async function deleteElection(electionId) {
 }
 
 /**
+ * Facultades distintas del padrón habilitado de una elección.
+ * @param {string} eleccionId
+ * @returns {Promise<FacultadPadron[]>}
+ */
+export async function fetchFacultadesPadron(eleccionId) {
+  const response = await api.get(`/elecciones/${eleccionId}/catalogo/facultades`)
+  return response?.data?.data || []
+}
+
+/**
+ * Carreras distintas del padrón habilitado filtradas por facultad.
+ * @param {string} eleccionId
+ * @param {string} codFacultad
+ * @returns {Promise<CarreraPadron[]>}
+ */
+export async function fetchCarrerasPadron(eleccionId, codFacultad) {
+  const response = await api.get(`/elecciones/${eleccionId}/catalogo/carreras`, {
+    params: { codFacultad },
+  })
+  return response?.data?.data || []
+}
+
+/**
  * Crea un cargo.
- * @param {{ nombre: string, facultad: string, eleccionId: string }} payload
+ * @param {{
+ *  nombre: string,
+ *  eleccionId: string,
+ *  alcance: AlcancePapeleta,
+ *  codFacultad?: string,
+ *  facultadNombre?: string,
+ *  codCarrera?: string,
+ *  carreraNombre?: string,
+ *  orden?: number,
+ * }} payload
  * @returns {Promise<Position>}
  */
 export async function createPosition(payload) {
@@ -194,7 +290,15 @@ export async function createPosition(payload) {
 /**
  * Actualiza un cargo.
  * @param {string} positionId
- * @param {{ nombre?: string, facultad?: string, eleccionId?: string }} payload
+ * @param {{
+ *  nombre?: string,
+ *  eleccionId?: string,
+ *  alcance?: AlcancePapeleta,
+ *  codFacultad?: string,
+ *  facultadNombre?: string,
+ *  codCarrera?: string,
+ *  carreraNombre?: string,
+ * }} payload
  * @returns {Promise<Position>}
  */
 export async function updatePosition(positionId, payload) {
@@ -227,6 +331,16 @@ export async function fetchBallotComplete(electionId, registro) {
   const params = registro ? { registro } : {}
   const response = await api.get(`/elecciones/${electionId}/papeleta`, { params })
   return response?.data
+}
+
+/**
+ * Lista las papeletas (EleccionCargo) configuradas para un proceso electoral.
+ * @param {string} eleccionId
+ * @returns {Promise<Papeleta[]>}
+ */
+export async function fetchPapeletasByEleccion(eleccionId) {
+  const ballot = await fetchBallotComplete(eleccionId)
+  return ballot?.cargos || []
 }
 
 /**

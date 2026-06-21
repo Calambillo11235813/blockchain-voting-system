@@ -44,17 +44,20 @@ export class CertificadoService {
     }
 
     // 3. Verificar que el elector haya sufragado en esta elección
-    const registro = await this.registroSufragioRepository.findOne({
+    const registros = await this.registroSufragioRepository.find({
       where: {
         eleccion: { id: eleccionId },
         elector: { id: electorId },
       },
-      relations: ['elector', 'eleccion'],
+      relations: ['elector', 'eleccion', 'eleccionCargo', 'eleccionCargo.cargo'],
+      order: { fechaSufragio: 'DESC' },
     });
 
-    if (!registro) {
+    if (registros.length === 0) {
       throw new ForbiddenException('El elector no ha emitido su voto en esta elección.');
     }
+
+    const registro = registros[0];
 
     const elector = registro.elector;
 
@@ -399,16 +402,23 @@ export class CertificadoService {
   /**
    * Verifica si un elector ya ha emitido su voto en una elección específica.
    */
-  async verificarSiVoto(eleccionId: string, electorId: string): Promise<{ haVotado: boolean; txHash?: string }> {
-    const registro = await this.registroSufragioRepository.findOne({
+  async verificarSiVoto(eleccionId: string, electorId: string): Promise<{
+    haVotado: boolean;
+    txHash?: string;
+    papeletasVotadas?: number;
+  }> {
+    const registros = await this.registroSufragioRepository.find({
       where: {
         eleccion: { id: eleccionId },
         elector: { id: electorId },
       },
+      order: { fechaSufragio: 'DESC' },
     });
+
     return {
-      haVotado: !!registro,
-      txHash: registro?.hashTransaccion,
+      haVotado: registros.length > 0,
+      txHash: registros[0]?.hashTransaccion,
+      papeletasVotadas: registros.length,
     };
   }
 }

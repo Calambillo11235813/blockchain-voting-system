@@ -30,8 +30,8 @@ async function bootstrap() {
 
   // 2. Recuperar todos los candidatos válidos para la elección
   const candidatos = await candidatoRepo.find({
-    relations: ['frente', 'frente.eleccionCargo', 'frente.eleccionCargo.eleccion'],
-    where: { frente: { eleccionCargo: { eleccion: { id: eleccion.id } } } }
+    relations: ['frente', 'frente.eleccion', 'eleccionCargo', 'eleccionCargo.eleccion'],
+    where: { eleccionCargo: { eleccion: { id: eleccion.id } } },
   });
 
   if (candidatos.length === 0) {
@@ -80,7 +80,17 @@ async function bootstrap() {
     try {
       console.log(`\n[${i + 1}/${electoresPendientes.length}] Procesando voto para ${elector.nombre} ${elector.apellido}...`);
       
-      const comprobante = await votoService.votar(elector.id, eleccion.id, candidatoRandom.id);
+      const eleccionCargoId = candidatoRandom.eleccionCargo?.id;
+      if (!eleccionCargoId) {
+        throw new Error('Candidato sin papeleta asociada');
+      }
+
+      const comprobante = await votoService.votar(
+        elector.id,
+        eleccion.id,
+        eleccionCargoId,
+        candidatoRandom.id,
+      );
       
       console.log(`  └─ Votó por: ${candidatoRandom.nombres} ${candidatoRandom.apellidos}`);
       console.log(`  └─ ✅ Hash: ${comprobante.data.hashTransaccion}`);

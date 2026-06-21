@@ -1,5 +1,6 @@
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { EleccionCargo } from './eleccion-cargo.entity';
+import { TipoCargoEnum } from '../enums/tipo-cargo.enum';
 
 /**
  * Catálogo maestro de cargos universitarios disponibles para ser disputados
@@ -17,9 +18,21 @@ export class Cargo {
   @Column('text', { nullable: false })
   nombre: string;
 
-  /** Facultad o unidad académica a la que pertenece este cargo. */
-  @Column('text', { nullable: false })
-  facultad: string;
+  /**
+   * Facultad descriptiva legacy del catálogo.
+   * @deprecated El alcance territorial vive en EleccionCargo.
+   */
+  @Column('text', { nullable: true, default: '' })
+  facultad: string | null;
+
+  /** Clasificación semántica para reglas de negocio (Rector, Decano, etc.). */
+  @Column({
+    type: 'enum',
+    enum: TipoCargoEnum,
+    nullable: false,
+    default: TipoCargoEnum.OTRO,
+  })
+  tipoCargo: TipoCargoEnum;
 
   // ─── Relaciones ──────────────────────────────────────────────────────────────
 

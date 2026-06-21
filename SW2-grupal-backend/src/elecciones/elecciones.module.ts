@@ -18,6 +18,7 @@ import { CargoService } from './services/cargo.service';
 import { FrenteService } from './services/frente.service';
 import { CandidatoService } from './services/candidato.service';
 import { PapeletaService } from './services/papeleta.service';
+import { PapeletaEligibilityService } from './services/papeleta-eligibility.service';
 
 // ─── Servicios Nuevos (submodularización por RF) ─────────────────────────────
 import { PadronService } from './services/padron.service';
@@ -73,6 +74,7 @@ import { VotoService } from './services/voto.service';
     FrenteService,
     CandidatoService,
     PapeletaService,
+    PapeletaEligibilityService,
     // Nuevos sub-servicios
     PadronService,
     JornadaService,

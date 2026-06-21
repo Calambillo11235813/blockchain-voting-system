@@ -115,7 +115,20 @@ export default function GestionPadron() {
     return <span className="text-slate-400 italic">—</span>
   }
 
-  const tableColumnCount = 8
+  /** Estudiantes: registro universitario. Docentes: código docente (registroDocente) o registro. */
+  function renderRegistroCell(elector) {
+    const valor = elector?.estamento === 'DOCENTE'
+      ? (elector.registroDocente || elector.registro)
+      : elector?.registro
+
+    if (valor) {
+      return valor
+    }
+
+    return <span className="text-slate-400 italic">—</span>
+  }
+
+  const tableColumnCount = 7
 
   if (isLoading) {
     return <div className="p-4 text-slate-600">Cargando datos...</div>
@@ -219,11 +232,10 @@ export default function GestionPadron() {
             <div className="-mx-4 mt-4 w-[calc(100%+2rem)] max-w-none overflow-x-auto overscroll-x-contain sm:mx-0 sm:mt-6 sm:w-full sm:max-w-full">
               <div className="inline-block min-w-full align-middle">
                 <div className="overflow-hidden rounded-none border-y border-slate-200 sm:rounded-xl sm:border">
-                  <table className="min-w-[880px] w-full divide-y divide-slate-200">
+                  <table className="min-w-[760px] w-full divide-y divide-slate-200">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th scope="col" className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:py-3">Registro</th>
-                        <th scope="col" className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:py-3">Cod. Docente</th>
+                        <th scope="col" className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:py-3">Registro / Código</th>
                         <th scope="col" className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:py-3">CI</th>
                         <th scope="col" className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:py-3">Apellidos y Nombres</th>
                         <th scope="col" className="px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 sm:px-4 sm:py-3">Estamento</th>
@@ -249,10 +261,7 @@ export default function GestionPadron() {
                         padronList.map((row) => (
                           <tr key={row.id} className="transition-colors hover:bg-slate-50">
                             <td className="whitespace-nowrap px-2 py-2 text-sm font-medium text-slate-900 sm:px-4 sm:py-3">
-                              {row.elector?.registro}
-                            </td>
-                            <td className="whitespace-nowrap px-2 py-2 text-sm text-slate-700 sm:px-4 sm:py-3">
-                              {row.elector?.registroDocente || <span className="text-slate-400 italic">—</span>}
+                              {renderRegistroCell(row.elector)}
                             </td>
                             <td className="whitespace-nowrap px-2 py-2 text-sm text-slate-700 sm:px-4 sm:py-3">
                               {row.elector?.ci}

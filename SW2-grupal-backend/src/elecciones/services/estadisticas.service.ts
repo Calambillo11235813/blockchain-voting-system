@@ -23,6 +23,7 @@ export interface EstadisticasParticipacion {
   tituloEleccion: string;
   totalHabilitados: number;
   totalVotosEmitidos: number;
+  totalElectoresParticipantes: number;
   porcentajeParticipacion: number;
   porEstamento: {
     estudiante: EstadisticasEstamento;
@@ -119,9 +120,18 @@ export class EstadisticasService {
     return mapa;
   }
 
+  private async contarElectoresParticipantes(eleccionId: string): Promise<number> {
+    const row = await this.registroSufragioRepository
+      .createQueryBuilder('rs')
+      .where('rs.eleccion = :eleccionId', { eleccionId })
+      .select('COUNT(DISTINCT rs.elector)', 'total')
+      .getRawOne<{ total: string }>();
+
+    return parseInt(row?.total ?? '0', 10);
+  }
+
   /**
    * Obtiene el conteo de votos emitidos agrupado por estamento para una elección.
-   * Retorna un mapa: EstamentoEnum → número de votos.
    */
   private async obtenerVotosPorEstamento(
     eleccionId: string,
@@ -207,9 +217,10 @@ export class EstadisticasService {
   ): Promise<ApiResponse<EstadisticasParticipacion>> {
     const eleccion = await this.findEleccionOrFail(eleccionId);
 
-    const [habPorEstamento, votosPorEstamento] = await Promise.all([
+    const [habPorEstamento, votosPorEstamento, totalElectoresParticipantes] = await Promise.all([
       this.obtenerHabilitadosPorEstamento(eleccionId),
       this.obtenerVotosPorEstamento(eleccionId),
+      this.contarElectoresParticipantes(eleccionId),
     ]);
 
     // Totales globales
@@ -218,7 +229,6 @@ export class EstadisticasService {
     for (const v of habPorEstamento.values()) totalHabilitados += v;
     for (const v of votosPorEstamento.values()) totalVotos += v;
 
-    // Función auxiliar para construir el objeto por estamento
     const buildEstamento = (key: EstamentoEnum): EstadisticasEstamento => {
       const hab = habPorEstamento.get(key) ?? 0;
       const votos = votosPorEstamento.get(key) ?? 0;
@@ -230,7 +240,8 @@ export class EstadisticasService {
       tituloEleccion: eleccion.titulo,
       totalHabilitados,
       totalVotosEmitidos: totalVotos,
-      porcentajeParticipacion: this.calcularPorcentaje(totalVotos, totalHabilitados),
+      totalElectoresParticipantes,
+      porcentajeParticipacion: this.calcularPorcentaje(totalElectoresParticipantes, totalHabilitados),
       porEstamento: {
         estudiante: buildEstamento(EstamentoEnum.ESTUDIANTE),
         docente: buildEstamento(EstamentoEnum.DOCENTE),

@@ -1,21 +1,23 @@
 import {
   Column,
   Entity,
+  Index,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { Eleccion } from './eleccion.entity';
 import { EleccionCargo } from './eleccion-cargo.entity';
 import { Candidato } from './candidato.entity';
 
 /**
- * Entidad que representa un frente político que participa en un cargo
- * específico de una elección concreta (EleccionCargo).
+ * Coalición / frente político que participa en un proceso electoral (Eleccion).
  *
- * La columna esOpcionGlobal permite marcar frentes que aplican a todos
- * los cargos de una elección (ej. listas únicas o frentes transversales).
+ * Un mismo frente puede postular candidatos en distintas papeletas (EleccionCargo)
+ * del mismo proceso a través de los registros de Candidato.
  */
 @Entity('frente')
+@Index(['eleccion', 'sigla'])
 export class Frente {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -33,25 +35,32 @@ export class Frente {
   logoUrl: string | null;
 
   /**
-   * Indica si este frente aplica de forma global a todos los cargos
-   * de la elección, en lugar de a un cargo específico.
+   * @deprecated Legacy — usar alcance de EleccionCargo en lugar de este flag.
+   * Se mantiene por compatibilidad con datos existentes.
    */
   @Column('bool', { nullable: false, default: false })
   esOpcionGlobal: boolean;
 
   // ─── Relaciones ──────────────────────────────────────────────────────────────
 
-  /**
-   * Cargo-en-Elección al que este frente se presenta.
-   * Si se elimina el EleccionCargo padre, el frente se elimina en cascada.
-   */
-  @ManyToOne(() => EleccionCargo, (ec) => ec.frentes, {
+  /** Proceso electoral al que pertenece este frente. */
+  @ManyToOne(() => Eleccion, (eleccion) => eleccion.frentes, {
     nullable: false,
     onDelete: 'CASCADE',
   })
-  eleccionCargo: EleccionCargo;
+  eleccion: Eleccion;
 
-  /** Candidatos que integran este frente para el cargo en disputa. */
+  /**
+   * @deprecated Legacy — el frente ya no se vincula a una papeleta concreta.
+   * Nullable durante la transición; nuevos frentes deben dejarlo en null.
+   */
+  @ManyToOne(() => EleccionCargo, (ec) => ec.frentesLegacy, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  eleccionCargo: EleccionCargo | null;
+
+  /** Candidatos que integran este frente (cada uno en una papeleta concreta). */
   @OneToMany(() => Candidato, (candidato) => candidato.frente, {
     cascade: false,
   })

@@ -332,6 +332,84 @@ export class PadronService {
   }
 
   /**
+   * Catálogo de facultades distintas presentes en el padrón habilitado de una elección.
+   * Usado por el admin al configurar papeletas con alcance FACULTAD o CARRERA.
+   */
+  async obtenerFacultadesDePadron(eleccionId: string): Promise<ApiResponse<Array<{ codFacultad: string; facultadNombre: string }>>> {
+    await this.validarEleccionExiste(eleccionId);
+
+    const rows = await this.padronElectoralRepository
+      .createQueryBuilder('p')
+      .innerJoin('p.elector', 'e')
+      .select('e.codFacultad', 'codFacultad')
+      .addSelect('MAX(e.facultad)', 'facultadNombre')
+      .where('p.eleccionId = :eleccionId', { eleccionId })
+      .andWhere('p.estaHabilitado = true')
+      .andWhere('e.codFacultad IS NOT NULL')
+      .andWhere("TRIM(e.codFacultad) <> ''")
+      .groupBy('e.codFacultad')
+      .orderBy('MAX(e.facultad)', 'ASC')
+      .getRawMany<{ codFacultad: string; facultadNombre: string }>();
+
+    const facultades = rows.map((row) => ({
+      codFacultad: String(row.codFacultad).trim(),
+      facultadNombre: String(row.facultadNombre ?? row.codFacultad).trim(),
+    }));
+
+    return createApiResponse(
+      HttpStatus.OK,
+      facultades,
+      facultades.length > 0
+        ? 'Facultades del padrón listadas correctamente.'
+        : 'No hay facultades en el padrón. Cargue el padrón Excel primero.',
+    );
+  }
+
+  /**
+   * Catálogo de carreras distintas del padrón habilitado, filtradas por facultad.
+   * Solo incluye electores con estamento ESTUDIANTE (docentes no tienen codCarrera).
+   */
+  async obtenerCarrerasDePadron(
+    eleccionId: string,
+    codFacultad: string,
+  ): Promise<ApiResponse<Array<{ codCarrera: string; carreraNombre: string }>>> {
+    await this.validarEleccionExiste(eleccionId);
+
+    const codFacultadNormalizado = codFacultad?.trim();
+    if (!codFacultadNormalizado) {
+      throw new BadRequestException('El parámetro codFacultad es obligatorio.');
+    }
+
+    const rows = await this.padronElectoralRepository
+      .createQueryBuilder('p')
+      .innerJoin('p.elector', 'e')
+      .select('e.codCarrera', 'codCarrera')
+      .addSelect('MAX(e.carrera)', 'carreraNombre')
+      .where('p.eleccionId = :eleccionId', { eleccionId })
+      .andWhere('p.estaHabilitado = true')
+      .andWhere('e.codFacultad = :codFacultad', { codFacultad: codFacultadNormalizado })
+      .andWhere('e.estamento = :estamento', { estamento: EstamentoEnum.ESTUDIANTE })
+      .andWhere('e.codCarrera IS NOT NULL')
+      .andWhere("TRIM(e.codCarrera) <> ''")
+      .groupBy('e.codCarrera')
+      .orderBy('MAX(e.carrera)', 'ASC')
+      .getRawMany<{ codCarrera: string; carreraNombre: string }>();
+
+    const carreras = rows.map((row) => ({
+      codCarrera: String(row.codCarrera).trim(),
+      carreraNombre: String(row.carreraNombre ?? row.codCarrera).trim(),
+    }));
+
+    return createApiResponse(
+      HttpStatus.OK,
+      carreras,
+      carreras.length > 0
+        ? 'Carreras del padrón listadas correctamente.'
+        : 'No hay carreras para la facultad seleccionada en el padrón.',
+    );
+  }
+
+  /**
    * RF1 · Habilita o deshabilita un elector individual dentro del padrón
    * de una elección específica (toggle booleano).
    */
@@ -390,6 +468,15 @@ export class PadronService {
   // ═══════════════════════════════════════════════════════════════════════════
   //  MÉTODOS PRIVADOS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  private async validarEleccionExiste(eleccionId: string): Promise<void> {
+    const eleccion = await this.dataSource.getRepository(Eleccion).findOne({
+      where: { id: eleccionId },
+    });
+    if (!eleccion) {
+      throw new NotFoundException(`No se encontró la elección con id ${eleccionId}`);
+    }
+  }
 
   private normalizarFila(row: FilaPadronNormalizada): FilaPadronNormalizada {
     return {

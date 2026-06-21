@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { CandidatoService } from 'src/elecciones/services/candidato.service';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { Candidato } from 'src/elecciones/entities/candidato.entity';
@@ -33,12 +33,13 @@ export class CandidatoController {
   }
 
   /**
-   * Lista todos los candidatos.
-   * @returns Lista de candidatos.
+   * Lista todos los candidatos, opcionalmente filtrados por elección.
    */
   @Get('lista')
-  async listarCandidatos(): Promise<ApiResponse<Candidato[]>> {
-    return this.candidatoService.listarCandidatos();
+  async listarCandidatos(
+    @Query('eleccionId') eleccionId?: string,
+  ): Promise<ApiResponse<Candidato[]>> {
+    return this.candidatoService.listarCandidatos(eleccionId);
   }
 
   /**
@@ -95,6 +96,7 @@ export class CandidatoController {
     return this.votoService.votar(
       emitirVotoDto.electorId,
       emitirVotoDto.eleccionId,
+      emitirVotoDto.eleccionCargoId,
       emitirVotoDto.candidatoId,
     );
   }

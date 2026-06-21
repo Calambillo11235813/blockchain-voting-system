@@ -30,20 +30,20 @@ export function Th({ children }) {
 
 /**
  * Valida el formulario de registro de frentes.
- * @param {{ nombreFrente: string, sigla: string, cargoId: string }} form
+ * @param {{ nombreFrente: string, sigla: string, eleccionId?: string }} form
  * @returns {string}
  */
 export function validateCoalitionForm(form) {
+  if (!form.eleccionId) return 'Seleccione un proceso electoral.'
   if (!form.nombreFrente?.trim()) return 'Ingrese el nombre del frente.'
   if (!form.sigla?.trim()) return 'Ingrese la sigla del frente.'
-  if (!form.cargoId) return 'Seleccione un cargo para el frente.'
   if (form.sigla.trim().length > 12) return 'La sigla es demasiado larga.'
   return ''
 }
 
 /**
  * Valida el formulario de registro de candidatos.
- * @param {{ ci: string, nombres: string, apellidos: string, cargoId: string, frenteId: string }} form
+ * @param {{ ci: string, nombres: string, apellidos: string, eleccionCargoId: string, frenteId: string, rolEspecifico: string }} form
  * @returns {string}
  */
 export function validateCandidateForm(form) {
@@ -52,7 +52,8 @@ export function validateCandidateForm(form) {
   if (!/^\d{6,10}$/.test(ci)) return 'El CI debe contener solo números (6 a 10 dígitos).'
   if (!form.nombres?.trim()) return 'Ingrese los nombres del candidato.'
   if (!form.apellidos?.trim()) return 'Ingrese los apellidos del candidato.'
-  if (!form.cargoId) return 'Seleccione un cargo.'
+  if (!form.eleccionCargoId) return 'Seleccione la papeleta a la que postula.'
+  if (!form.rolEspecifico) return 'Seleccione el cargo al que postula dentro de la fórmula.'
   if (!form.frenteId) return 'Seleccione un frente.'
   return ''
 }

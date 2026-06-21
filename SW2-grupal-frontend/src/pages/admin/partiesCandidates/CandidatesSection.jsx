@@ -6,6 +6,11 @@ import {
   updateCandidate,
 } from '../../../services/electionsService'
 import {
+  formatAmbito,
+  formatPapeletaLabel,
+  getRolesForPapeleta,
+} from '../../../utils/papeletaConstants'
+import {
   Field,
   Th,
   readImageAsDataUrl,
@@ -16,7 +21,8 @@ import {
 /**
  * Gestión de Candidatos.
  * @param {{
- *  positions: any[]
+ *  eleccionId: string
+ *  papeletas: any[]
  *  coalitions: any[]
  *  candidates: any[]
  *  setCandidates: (value: any[]) => void
@@ -30,7 +36,8 @@ import {
  * @returns {import('react').JSX.Element}
  */
 export default function CandidatesSection({
-  positions,
+  eleccionId,
+  papeletas,
   coalitions,
   candidates,
   setCandidates,
@@ -47,37 +54,25 @@ export default function CandidatesSection({
     ci: '',
     nombres: '',
     apellidos: '',
-    cargoId: '',
+    eleccionCargoId: '',
+    rolEspecifico: '',
     frenteId: '',
     fotoFile: null,
     fotoPreview: '',
     existingFotoUrl: '',
   }))
 
-  const coalitionsByPositionId = useMemo(() => {
-    const map = new Map()
-    for (const coalition of coalitions) {
-      const positionId = coalition?.cargo?.id
-      if (!positionId) continue
-      const list = map.get(positionId) || []
-      list.push(coalition)
-      map.set(positionId, list)
-    }
-    return map
-  }, [coalitions])
-
-  const coalitionsForSelectedPosition = useMemo(() => {
-    if (!candidateForm.cargoId) return []
-    return coalitionsByPositionId.get(candidateForm.cargoId) || []
-  }, [coalitionsByPositionId, candidateForm.cargoId])
-
-  const positionNameById = useMemo(() => {
-    const map = new Map()
-    for (const position of positions) {
-      map.set(position.id, position.nombre)
-    }
-    return map
-  }, [positions])
+  const resetCandidateForm = () => ({
+    ci: '',
+    nombres: '',
+    apellidos: '',
+    eleccionCargoId: '',
+    rolEspecifico: '',
+    frenteId: '',
+    fotoFile: null,
+    fotoPreview: '',
+    existingFotoUrl: '',
+  })
 
   const coalitionById = useMemo(() => {
     const map = new Map()
@@ -86,6 +81,36 @@ export default function CandidatesSection({
     }
     return map
   }, [coalitions])
+
+  const papeletaById = useMemo(() => {
+    const map = new Map()
+    for (const papeleta of papeletas) {
+      map.set(papeleta.id, papeleta)
+    }
+    return map
+  }, [papeletas])
+
+  const selectedPapeleta = useMemo(
+    () => papeletaById.get(candidateForm.eleccionCargoId) ?? null,
+    [papeletaById, candidateForm.eleccionCargoId],
+  )
+
+  const rolesForSelectedPapeleta = useMemo(
+    () => (selectedPapeleta ? getRolesForPapeleta(selectedPapeleta) : []),
+    [selectedPapeleta],
+  )
+
+  const handlePapeletaChange = (eleccionCargoId) => {
+    const papeleta = papeletaById.get(eleccionCargoId)
+    const roles = papeleta ? getRolesForPapeleta(papeleta) : []
+    const rolEspecifico = roles.length === 1 ? roles[0] : ''
+
+    setCandidateForm((prev) => ({
+      ...prev,
+      eleccionCargoId,
+      rolEspecifico,
+    }))
+  }
 
   const handleCreateCandidate = async () => {
     setErrorMessage('')
@@ -101,39 +126,28 @@ export default function CandidatesSection({
       setIsCreatingCandidate(true)
       const fotoUrl = candidateForm.fotoFile ? await readImageAsDataUrl(candidateForm.fotoFile) : ''
 
+      const payload = {
+        ci: candidateForm.ci.trim(),
+        nombres: candidateForm.nombres.trim(),
+        apellidos: candidateForm.apellidos.trim(),
+        frenteId: candidateForm.frenteId,
+        eleccionCargoId: candidateForm.eleccionCargoId,
+        rolEspecifico: candidateForm.rolEspecifico,
+        ...(fotoUrl ? { fotoUrl } : {}),
+      }
+
       if (editingCandidateId) {
-        await updateCandidate(editingCandidateId, {
-          ci: candidateForm.ci.trim(),
-          nombres: candidateForm.nombres.trim(),
-          apellidos: candidateForm.apellidos.trim(),
-          frenteId: candidateForm.frenteId,
-          ...(fotoUrl ? { fotoUrl } : {}),
-        })
+        await updateCandidate(editingCandidateId, payload)
         setSuccessMessage('Actualización exitosa')
       } else {
-        await createCandidate({
-          ci: candidateForm.ci.trim(),
-          nombres: candidateForm.nombres.trim(),
-          apellidos: candidateForm.apellidos.trim(),
-          frenteId: candidateForm.frenteId,
-          ...(fotoUrl ? { fotoUrl } : {}),
-        })
+        await createCandidate(payload)
         setSuccessMessage('Registro exitoso')
       }
 
-      const updatedCandidates = await fetchCandidates()
+      const updatedCandidates = await fetchCandidates(eleccionId)
       setCandidates(updatedCandidates)
       setEditingCandidateId('')
-      setCandidateForm({
-        ci: '',
-        nombres: '',
-        apellidos: '',
-        cargoId: '',
-        frenteId: '',
-        fotoFile: null,
-        fotoPreview: '',
-        existingFotoUrl: '',
-      })
+      setCandidateForm(resetCandidateForm())
     } catch {
       setErrorMessage('Hubo un problema al guardar el candidato. Inténtelo más tarde.')
     } finally {
@@ -145,17 +159,14 @@ export default function CandidatesSection({
     setErrorMessage('')
     setSuccessMessage('')
 
-    const coalitionId = candidate?.frente?.id || ''
-    const coalition = coalitionId ? coalitionById.get(coalitionId) : null
-    const positionId = coalition?.cargo?.id || ''
-
     setEditingCandidateId(candidate.id)
     setCandidateForm({
       ci: candidate.ci || '',
       nombres: candidate.nombres || '',
       apellidos: candidate.apellidos || '',
-      cargoId: positionId,
-      frenteId: coalitionId,
+      eleccionCargoId: candidate?.eleccionCargo?.id || '',
+      rolEspecifico: candidate?.rolEspecifico || '',
+      frenteId: candidate?.frente?.id || '',
       fotoFile: null,
       fotoPreview: candidate.fotoUrl || '',
       existingFotoUrl: candidate.fotoUrl || '',
@@ -167,22 +178,13 @@ export default function CandidatesSection({
     setSuccessMessage('')
     try {
       await deleteCandidate(candidateId)
-      const updatedCandidates = await fetchCandidates()
+      const updatedCandidates = await fetchCandidates(eleccionId)
       setCandidates(updatedCandidates)
       setSuccessMessage('Eliminación exitosa')
 
       if (editingCandidateId === candidateId) {
         setEditingCandidateId('')
-        setCandidateForm({
-          ci: '',
-          nombres: '',
-          apellidos: '',
-          cargoId: '',
-          frenteId: '',
-          fotoFile: null,
-          fotoPreview: '',
-          existingFotoUrl: '',
-        })
+        setCandidateForm(resetCandidateForm())
       }
     } catch {
       setErrorMessage('No se pudo eliminar el candidato. Inténtelo más tarde.')
@@ -213,7 +215,9 @@ export default function CandidatesSection({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-base font-semibold text-blue-900">Gestión de Candidatos</h3>
-          <p className="mt-1 text-sm text-slate-700">Registra candidatos y asigna su frente y cargo.</p>
+          <p className="mt-1 text-sm text-slate-700">
+            Registra candidatos indicando frente, papeleta y el rol específico dentro de la fórmula.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {editingCandidateId ? (
@@ -223,16 +227,7 @@ export default function CandidatesSection({
                 setErrorMessage('')
                 setSuccessMessage('')
                 setEditingCandidateId('')
-                setCandidateForm({
-                  ci: '',
-                  nombres: '',
-                  apellidos: '',
-                  cargoId: '',
-                  frenteId: '',
-                  fotoFile: null,
-                  fotoPreview: '',
-                  existingFotoUrl: '',
-                })
+                setCandidateForm(resetCandidateForm())
               }}
               disabled={isBusy}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
@@ -244,7 +239,7 @@ export default function CandidatesSection({
           <button
             type="button"
             onClick={handleCreateCandidate}
-            disabled={isBusy}
+            disabled={isBusy || coalitions.length === 0 || papeletas.length === 0}
             className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-yellow-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
           >
             {isCreatingCandidate
@@ -255,6 +250,18 @@ export default function CandidatesSection({
           </button>
         </div>
       </div>
+
+      {coalitions.length === 0 ? (
+        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Debe registrar al menos un frente antes de agregar candidatos.
+        </p>
+      ) : null}
+
+      {papeletas.length === 0 ? (
+        <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Este proceso electoral aún no tiene papeletas configuradas. Créelas en Gestión de Elección.
+        </p>
+      ) : null}
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Carnet de identidad (CI)">
@@ -288,25 +295,39 @@ export default function CandidatesSection({
           />
         </Field>
 
-        <Field label="Cargo">
+        <Field label="Papeleta">
           <select
-            value={candidateForm.cargoId}
-            onChange={(e) => {
-              const positionId = e.target.value
-              setCandidateForm((prev) => ({
-                ...prev,
-                cargoId: positionId,
-                // Si cambia el cargo, reseteamos el frente.
-                frenteId: '',
-              }))
-            }}
+            value={candidateForm.eleccionCargoId}
+            onChange={(e) => handlePapeletaChange(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            disabled={isBusy}
+            disabled={isBusy || papeletas.length === 0}
           >
-            <option value="">Seleccione un cargo</option>
-            {positions.map((position) => (
-              <option key={position.id} value={position.id}>
-                {position.nombre}
+            <option value="">Seleccione una papeleta</option>
+            {papeletas.map((papeleta) => (
+              <option key={papeleta.id} value={papeleta.id}>
+                {formatPapeletaLabel(papeleta)}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Cargo al que postula">
+          <select
+            value={candidateForm.rolEspecifico}
+            onChange={(e) =>
+              setCandidateForm((prev) => ({ ...prev, rolEspecifico: e.target.value }))
+            }
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            disabled={isBusy || !candidateForm.eleccionCargoId}
+          >
+            <option value="">
+              {candidateForm.eleccionCargoId
+                ? 'Seleccione el rol dentro de la fórmula'
+                : 'Seleccione una papeleta primero'}
+            </option>
+            {rolesForSelectedPapeleta.map((rol) => (
+              <option key={rol} value={rol}>
+                {rol}
               </option>
             ))}
           </select>
@@ -317,12 +338,12 @@ export default function CandidatesSection({
             value={candidateForm.frenteId}
             onChange={(e) => setCandidateForm((prev) => ({ ...prev, frenteId: e.target.value }))}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            disabled={isBusy || !candidateForm.cargoId}
+            disabled={isBusy || coalitions.length === 0}
           >
             <option value="">
-              {candidateForm.cargoId ? 'Seleccione un frente' : 'Seleccione un cargo primero'}
+              {coalitions.length === 0 ? 'Registre un frente primero' : 'Seleccione un frente'}
             </option>
-            {coalitionsForSelectedPosition.map((coalition) => (
+            {coalitions.map((coalition) => (
               <option key={coalition.id} value={coalition.id}>
                 {coalition.nombreFrente} ({coalition.sigla})
               </option>
@@ -359,10 +380,11 @@ export default function CandidatesSection({
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <Th>CI</Th>
               <Th>Nombre</Th>
               <Th>Frente</Th>
               <Th>Cargo</Th>
+              <Th>Ámbito</Th>
+              <Th>Foto</Th>
               <Th>
                 <span className="block text-center">Acciones</span>
               </Th>
@@ -371,29 +393,42 @@ export default function CandidatesSection({
           <tbody className="divide-y divide-slate-200 bg-white">
             {isLoading ? (
               <tr>
-                <td className="px-4 py-3 text-sm text-slate-700" colSpan={5}>
+                <td className="px-4 py-3 text-sm text-slate-700" colSpan={6}>
                   Cargando candidatos…
                 </td>
               </tr>
             ) : candidates.length === 0 ? (
               <tr>
-                <td className="px-4 py-3 text-sm text-slate-700" colSpan={5}>
-                  No hay candidatos registrados.
+                <td className="px-4 py-3 text-sm text-slate-700" colSpan={6}>
+                  No hay candidatos registrados en este proceso electoral.
                 </td>
               </tr>
             ) : (
               candidates.map((candidate) => {
                 const coalition = candidate?.frente?.id ? coalitionById.get(candidate.frente.id) : null
-                const positionName = coalition?.cargo?.id ? positionNameById.get(coalition.cargo.id) : ''
                 const coalitionName = coalition?.nombreFrente || candidate?.frente?.nombreFrente || '—'
                 const fullName = `${candidate.nombres} ${candidate.apellidos}`.trim()
+                const papeleta = candidate?.eleccionCargo ?? papeletaById.get(candidate?.eleccionCargo?.id) ?? null
+                const cargoLabel = candidate.rolEspecifico?.trim() || 'Sin rol asignado'
+                const ambitoLabel = formatAmbito(papeleta)
 
                 return (
                   <tr key={candidate.id}>
-                    <td className="px-4 py-3 text-sm text-slate-700">{candidate.ci || '—'}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-slate-900">{fullName || '—'}</td>
                     <td className="px-4 py-3 text-sm text-slate-700">{coalitionName}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{positionName || '—'}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-900">{cargoLabel}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{ambitoLabel}</td>
+                    <td className="px-4 py-3">
+                      {candidate.fotoUrl ? (
+                        <img
+                          src={candidate.fotoUrl}
+                          alt={fullName}
+                          className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm text-slate-600">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
                         <button

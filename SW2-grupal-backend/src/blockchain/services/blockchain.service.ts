@@ -90,21 +90,21 @@ export class BlockchainService implements OnModuleInit {
 
   /**
    * Registra el voto de un elector en la blockchain usando la llave privada institucional.
-   * @param eleccionId UUID de la eleccion
-   * @param candidatoId UUID del candidato/frente
+   * @param papeletaId UUID de la papeleta (EleccionCargo) — clave on-chain del comicio parcial.
+   * @param frenteId UUID del frente
    * @param electorId UUID del elector
    * @param privateKey Llave privada de la wallet institucional
    * @returns Hash de la transaccion enviada.
    */
-  async registrarVoto(eleccionId: string, candidatoId: string, electorId: string, privateKey: string): Promise<string> {
+  async registrarVoto(papeletaId: string, frenteId: string, electorId: string, privateKey: string): Promise<string> {
     const trimmedKey = privateKey.trim();
     const normalizedKey = trimmedKey.startsWith('0x') ? trimmedKey : `0x${trimmedKey}`;
     const wallet = new ethers.Wallet(normalizedKey, this.getProvider());
     const contractInstance = await this.getContract();
     const contractWithSigner = contractInstance.connect(wallet);
 
-    const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(eleccionId));
-    const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(candidatoId));
+    const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(papeletaId));
+    const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(frenteId));
     const electorHash = ethers.keccak256(ethers.toUtf8Bytes(electorId));
 
     const tx = await contractWithSigner.votar(eleccionHash, candidatoHash, electorHash);
@@ -113,14 +113,14 @@ export class BlockchainService implements OnModuleInit {
   }
 
   /**
-   * Obtiene la cantidad de votos de un candidato/frente en una eleccion.
-   * @param eleccionId UUID de la eleccion
-   * @param candidatoId UUID del candidato/frente
+   * Obtiene la cantidad de votos de un frente en una papeleta (EleccionCargo).
+   * @param papeletaId UUID de la papeleta
+   * @param frenteId UUID del frente
    * @returns Cantidad de votos
    */
-  async obtenerVotos(eleccionId: string, candidatoId: string): Promise<number> {
-    const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(eleccionId));
-    const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(candidatoId));
+  async obtenerVotos(papeletaId: string, frenteId: string): Promise<number> {
+    const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(papeletaId));
+    const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(frenteId));
     
     const contractInstance = await this.getContract();
     const votos = await contractInstance.obtenerVotos(eleccionHash, candidatoHash);

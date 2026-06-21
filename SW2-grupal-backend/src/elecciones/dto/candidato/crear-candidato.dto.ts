@@ -25,4 +25,13 @@ export class CrearCandidatoDto {
 
   @IsUUID()
   frenteId: string;
+
+  /** Papeleta concreta (EleccionCargo) a la que postula el candidato. */
+  @IsUUID()
+  eleccionCargoId: string;
+
+  /** Rol dentro de la fórmula de la papeleta (ej. Rector, Decano). */
+  @IsString()
+  @IsNotEmpty()
+  rolEspecifico: string;
 }

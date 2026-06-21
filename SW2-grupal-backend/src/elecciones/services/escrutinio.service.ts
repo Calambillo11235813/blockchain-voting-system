@@ -47,6 +47,17 @@ export interface ResultadoFrenteParitario {
 }
 
 /** Resultado completo del escrutinio paritario de una elección. */
+export interface ResultadoPapeletaEscrutinio {
+  eleccionCargoId: string;
+  cargoNombre: string;
+  alcance: string;
+  codFacultad: string | null;
+  codCarrera: string | null;
+  resultadosPorFrente: ResultadoFrenteParitario[];
+  ganador: Pick<ResultadoFrenteParitario, 'frenteId' | 'nombreFrente' | 'sigla' | 'resultadoPonderado'> | null;
+}
+
+/** Resultado completo del escrutinio paritario de una elección. */
 export interface ResultadoEscrutinioParitario {
   eleccionId: string;
   tituloEleccion: string;
@@ -55,13 +66,17 @@ export interface ResultadoEscrutinioParitario {
   totalHabilitados: number;
   totalHabilitadosDocentes: number;
   totalHabilitadosEstudiantes: number;
-  /** Total de sufragios emitidos según RegistroSufragio (BD). */
+  /** Total de sufragios emitidos (puede ser > electores si votaron varias papeletas). */
   totalSufragiosEmitidos: number;
+  /** Electores distintos que emitieron al menos un sufragio. */
+  totalElectoresParticipantes: number;
   totalSufragiosDocentes: number;
   totalSufragiosEstudiantes: number;
   /** Porcentaje de participación general. */
   participacionPorcentaje: number;
-  /** Resultados por frente con ponderación paritaria. */
+  /** Resultados agrupados por papeleta/sub-elección. */
+  resultadosPorPapeleta: ResultadoPapeletaEscrutinio[];
+  /** Resultados por frente con ponderación paritaria (aplanado, compatibilidad). */
   resultadosPorFrente: ResultadoFrenteParitario[];
   /** Frente ganador (mayor resultado ponderado), null si no hay votos. */
   ganador: Pick<ResultadoFrenteParitario, 'frenteId' | 'nombreFrente' | 'sigla' | 'resultadoPonderado'> | null;
@@ -169,6 +184,9 @@ export class EscrutinioService {
     ).length;
 
     const totalSufragiosEmitidos = sufragiosConElector.length;
+    const totalElectoresParticipantes = new Set(
+      sufragiosConElector.map((rs) => rs.elector?.id).filter(Boolean),
+    ).size;
 
     // ── 4. Electores habilitados por estamento (PadronElectoral) ──────────
     const padronConElector = await this.padronElectoralRepository
@@ -190,116 +208,86 @@ export class EscrutinioService {
 
     const participacionPorcentaje =
       totalHabilitados > 0
-        ? parseFloat(((totalSufragiosEmitidos / totalHabilitados) * 100).toFixed(2))
+        ? parseFloat(((totalElectoresParticipantes / totalHabilitados) * 100).toFixed(2))
         : 0;
 
-    // ── 5. Frentes de la elección (DB) ─────────────────────────────────────
+    // ── 5. Papeletas de la elección (DB) ───────────────────────────────────
     const eleccionCargos = await this.eleccionCargoRepository.find({
       where: { eleccion: { id: eleccionId } },
-      relations: ['frentes'],
+      relations: ['cargo', 'candidatos', 'candidatos.frente'],
+      order: { orden: 'ASC' },
     });
 
-    const frentesDB = eleccionCargos.flatMap((ec) => ec.frentes ?? []);
-
-    // ── 6. Votos por frente desde blockchain ────────────────────────────
     let fuenteVotos: 'blockchain' | 'simulado' = 'simulado';
-    let votosBlockchainMap = new Map<string, number>(); // frenteId → votos
+    const resultadosPorPapeleta: ResultadoPapeletaEscrutinio[] = [];
+    const resultadosPorFrente: ResultadoFrenteParitario[] = [];
 
-    try {
-      fuenteVotos = 'blockchain';
+    for (const eleccionCargo of eleccionCargos) {
+      const frentesMap = new Map<string, typeof eleccionCargo.candidatos[0]['frente']>();
+      for (const candidato of eleccionCargo.candidatos ?? []) {
+        if (candidato.frente) {
+          frentesMap.set(candidato.frente.id, candidato.frente);
+        }
+      }
+      const frentesDB = Array.from(frentesMap.values());
+      const votosBlockchainMap = new Map<string, number>();
 
-      // Obtener los votos directamente por el ID del frente y elección
-      for (const frente of frentesDB) {
-        const votos = await this.blockchainService.obtenerVotos(eleccionId, frente.id);
-        votosBlockchainMap.set(frente.id, votos);
+      try {
+        fuenteVotos = 'blockchain';
+        for (const frente of frentesDB) {
+          const votos = await this.blockchainService.obtenerVotos(eleccionCargo.id, frente.id);
+          votosBlockchainMap.set(frente.id, votos);
+        }
+      } catch (error) {
+        console.error('[EscrutinioService] Error al conectar con blockchain:', error);
+        fuenteVotos = 'simulado';
+        for (const frente of frentesDB) {
+          votosBlockchainMap.set(frente.id, Math.floor(Math.random() * 450) + 50);
+        }
       }
-    } catch (error) {
-      console.error('[EscrutinioService] Error al conectar con blockchain:', error);
-      // Si el blockchain no está disponible, simulamos votos aleatorios
-      // para no bloquear la generación del reporte y permitir visualizar la UI.
-      fuenteVotos = 'simulado';
-      for (const frente of frentesDB) {
-        // Generar un número aleatorio entre 50 y 500 para la demo
-        const mockVotos = Math.floor(Math.random() * 450) + 50;
-        votosBlockchainMap.set(frente.id, mockVotos);
-      }
+
+      const totalVotosBlockchain = Array.from(votosBlockchainMap.values()).reduce((acc, v) => acc + v, 0);
+
+      const resultadosFrentePapeleta = frentesDB.map((frente) => {
+        const resultado = this.calcularResultadoFrenteParitario(
+          frente,
+          votosBlockchainMap.get(frente.id) ?? 0,
+          totalVotosBlockchain,
+          totalSufragiosDocentes,
+          totalSufragiosEstudiantes,
+          totalSufragiosEmitidos,
+          totalHabilitadosDocentes,
+          totalHabilitadosEstudiantes,
+        );
+        resultadosPorFrente.push(resultado);
+        return resultado;
+      });
+
+      resultadosFrentePapeleta.sort((a, b) => b.resultadoPonderado - a.resultadoPonderado);
+
+      const ganadorPapeleta =
+        resultadosFrentePapeleta.length > 0 && resultadosFrentePapeleta[0].votosBlockchain > 0
+          ? {
+              frenteId: resultadosFrentePapeleta[0].frenteId,
+              nombreFrente: resultadosFrentePapeleta[0].nombreFrente,
+              sigla: resultadosFrentePapeleta[0].sigla,
+              resultadoPonderado: resultadosFrentePapeleta[0].resultadoPonderado,
+            }
+          : null;
+
+      resultadosPorPapeleta.push({
+        eleccionCargoId: eleccionCargo.id,
+        cargoNombre: eleccionCargo.cargo?.nombre ?? 'Cargo',
+        alcance: eleccionCargo.alcance,
+        codFacultad: eleccionCargo.codFacultad,
+        codCarrera: eleccionCargo.codCarrera,
+        resultadosPorFrente: resultadosFrentePapeleta,
+        ganador: ganadorPapeleta,
+      });
     }
 
-    // ── 7. Calcular total de votos blockchain para porcentajes ─────────────
-    const totalVotosBlockchain = Array.from(votosBlockchainMap.values()).reduce(
-      (acc, v) => acc + v,
-      0,
-    );
-
-    // ── 8. Calcular resultados paritarios por frente ───────────────────────
-    const resultadosPorFrente: ResultadoFrenteParitario[] = frentesDB.map((frente) => {
-      // Buscar votos en blockchain por el ID del frente
-      let votosBlockchain = votosBlockchainMap.get(frente.id) ?? 0;
-
-      const porcentajeTotal =
-        totalVotosBlockchain > 0
-          ? parseFloat(((votosBlockchain / totalVotosBlockchain) * 100).toFixed(2))
-          : 0;
-
-      // ── Ponderación paritaria ────────────────────────────────────────────
-      // Como la blockchain no distingue votos por estamento, se estima
-      // la participación de cada estamento de forma proporcional:
-      //   votosEstimados_docente  = votosBlockchain * (sufragiosDocentes / totalSufragios)
-      //   votosEstimados_estudiant = votosBlockchain * (sufragiosEstudiantes / totalSufragios)
-      //
-      // Luego el score de cada estamento se pondera sobre su padrón:
-      //   scoreDocente  = (votosEst_doc / habilitadosDocentes) * 100
-      //   scoreEstudiante = (votosEst_est / habilitadosEstudiantes) * 100
-      //   resultadoPonderado = scoreDocente * 0.5 + scoreEstudiante * 0.5
-
-      const propDocentes =
-        totalSufragiosEmitidos > 0 ? totalSufragiosDocentes / totalSufragiosEmitidos : 0.5;
-      const propEstudiantes =
-        totalSufragiosEmitidos > 0 ? totalSufragiosEstudiantes / totalSufragiosEmitidos : 0.5;
-
-      let votosEstDoc = votosBlockchain * propDocentes;
-      let votosEstEst = votosBlockchain * propEstudiantes;
-
-      // --- SANITIZACIÓN PARA PRUEBAS LOCALES ---
-      // Si por hacer pruebas repetidas la Blockchain acumuló más votos que el padrón,
-      // limitamos visualmente los votos brutos al máximo de habilitados para no romper la UI.
-      if (votosEstDoc > totalHabilitadosDocentes) votosEstDoc = totalHabilitadosDocentes;
-      if (votosEstEst > totalHabilitadosEstudiantes) votosEstEst = totalHabilitadosEstudiantes;
-
-      let scoreDocente =
-        totalHabilitadosDocentes > 0
-          ? parseFloat(((votosEstDoc / totalHabilitadosDocentes) * 100).toFixed(4))
-          : 0;
-
-      let scoreEstudiante =
-        totalHabilitadosEstudiantes > 0
-          ? parseFloat(((votosEstEst / totalHabilitadosEstudiantes) * 100).toFixed(4))
-          : 0;
-          
-      if (scoreDocente > 100) scoreDocente = 100;
-      if (scoreEstudiante > 100) scoreEstudiante = 100;
-
-      const resultadoPonderado = parseFloat(
-        (scoreDocente * 0.5 + scoreEstudiante * 0.5).toFixed(4),
-      );
-
-      return {
-        frenteId: frente.id,
-        nombreFrente: frente.nombreFrente,
-        sigla: frente.sigla,
-        esOpcionGlobal: frente.esOpcionGlobal,
-        votosBlockchain,
-        porcentajeTotal,
-        scoreDocente,
-        scoreEstudiante,
-        resultadoPonderado,
-      };
-    });
-
-    // Ordenar de mayor a menor resultado ponderado
     resultadosPorFrente.sort((a, b) => b.resultadoPonderado - a.resultadoPonderado);
 
-    // ── 9. Determinar ganador ──────────────────────────────────────────────
     const ganador =
       resultadosPorFrente.length > 0 && resultadosPorFrente[0].votosBlockchain > 0
         ? {
@@ -310,7 +298,6 @@ export class EscrutinioService {
           }
         : null;
 
-    // ── 10. Construir respuesta ────────────────────────────────────────────
     const resultado: ResultadoEscrutinioParitario = {
       eleccionId: eleccion.id,
       tituloEleccion: eleccion.titulo,
@@ -319,9 +306,11 @@ export class EscrutinioService {
       totalHabilitadosDocentes,
       totalHabilitadosEstudiantes,
       totalSufragiosEmitidos,
+      totalElectoresParticipantes,
       totalSufragiosDocentes,
       totalSufragiosEstudiantes,
       participacionPorcentaje,
+      resultadosPorPapeleta,
       resultadosPorFrente,
       ganador,
       fuenteVotos,
@@ -384,6 +373,62 @@ export class EscrutinioService {
   // ═══════════════════════════════════════════════════════════════════════════
   //  MÉTODOS PRIVADOS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  private calcularResultadoFrenteParitario(
+    frente: Frente,
+    votosBlockchain: number,
+    totalVotosBlockchain: number,
+    totalSufragiosDocentes: number,
+    totalSufragiosEstudiantes: number,
+    totalSufragiosEmitidos: number,
+    totalHabilitadosDocentes: number,
+    totalHabilitadosEstudiantes: number,
+  ): ResultadoFrenteParitario {
+    const porcentajeTotal =
+      totalVotosBlockchain > 0
+        ? parseFloat(((votosBlockchain / totalVotosBlockchain) * 100).toFixed(2))
+        : 0;
+
+    const propDocentes =
+      totalSufragiosEmitidos > 0 ? totalSufragiosDocentes / totalSufragiosEmitidos : 0.5;
+    const propEstudiantes =
+      totalSufragiosEmitidos > 0 ? totalSufragiosEstudiantes / totalSufragiosEmitidos : 0.5;
+
+    let votosEstDoc = votosBlockchain * propDocentes;
+    let votosEstEst = votosBlockchain * propEstudiantes;
+
+    if (votosEstDoc > totalHabilitadosDocentes) votosEstDoc = totalHabilitadosDocentes;
+    if (votosEstEst > totalHabilitadosEstudiantes) votosEstEst = totalHabilitadosEstudiantes;
+
+    let scoreDocente =
+      totalHabilitadosDocentes > 0
+        ? parseFloat(((votosEstDoc / totalHabilitadosDocentes) * 100).toFixed(4))
+        : 0;
+
+    let scoreEstudiante =
+      totalHabilitadosEstudiantes > 0
+        ? parseFloat(((votosEstEst / totalHabilitadosEstudiantes) * 100).toFixed(4))
+        : 0;
+
+    if (scoreDocente > 100) scoreDocente = 100;
+    if (scoreEstudiante > 100) scoreEstudiante = 100;
+
+    const resultadoPonderado = parseFloat(
+      (scoreDocente * 0.5 + scoreEstudiante * 0.5).toFixed(4),
+    );
+
+    return {
+      frenteId: frente.id,
+      nombreFrente: frente.nombreFrente,
+      sigla: frente.sigla,
+      esOpcionGlobal: frente.esOpcionGlobal,
+      votosBlockchain,
+      porcentajeTotal,
+      scoreDocente,
+      scoreEstudiante,
+      resultadoPonderado,
+    };
+  }
 
   /**
    * Genera una firma digital simulada usando una cadena de texto que resume

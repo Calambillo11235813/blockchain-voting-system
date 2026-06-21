@@ -9,6 +9,15 @@ import {
   updateElection,
   updatePosition,
 } from '../../../services/electionsService'
+import PapeletaForm from './PapeletaForm'
+import {
+  ALCANCE_LABELS,
+  ALCANCE_PAPELETA,
+  buildPositionPayload,
+  createEmptyPositionForm,
+  formatPositionAmbito,
+  validatePositionForm,
+} from '../../../utils/papeletaConstants'
 
 /**
  * Sección de Gestión de Elección.
@@ -39,11 +48,7 @@ export default function ElectionManagement() {
     isSurnameRestrictionActive: true,
   }))
 
-  const [positionForm, setPositionForm] = useState(() => ({
-    name: '',
-    faculty: '',
-    electionId: '',
-  }))
+  const [positionForm, setPositionForm] = useState(() => createEmptyPositionForm())
 
   const electionLabelById = useMemo(() => {
     const map = new Map()
@@ -73,7 +78,9 @@ export default function ElectionManagement() {
         // Si hay elecciones y aún no se seleccionó nada para cargos,
         // sugerimos la primera para facilitar el flujo institucional.
         if (electionsData.length > 0) {
-          setPositionForm((prev) => (prev.electionId ? prev : { ...prev, electionId: electionsData[0].id }))
+          setPositionForm((prev) =>
+            prev.electionId ? prev : createEmptyPositionForm(electionsData[0].id),
+          )
         }
       } catch {
         if (!isMounted) return
@@ -110,11 +117,7 @@ export default function ElectionManagement() {
 
   const resetPositionForm = () => {
     setEditingPositionId('')
-    setPositionForm({
-      name: '',
-      faculty: '',
-      electionId: elections[0]?.id || '',
-    })
+    setPositionForm(createEmptyPositionForm(elections[0]?.id || ''))
   }
 
   const refreshLists = async () => {
@@ -227,20 +230,18 @@ export default function ElectionManagement() {
       return
     }
 
-    const payload = {
-      nombre: positionForm.name.trim(),
-      facultad: positionForm.faculty.trim(),
-      eleccionId: positionForm.electionId,
-    }
+    const payload = editingPositionId
+      ? { nombre: positionForm.name.trim() }
+      : buildPositionPayload(positionForm)
 
     try {
       setIsSavingPosition(true)
       if (editingPositionId) {
         await updatePosition(editingPositionId, payload)
-        setSuccessMessage('Cargo actualizado correctamente.')
+        setSuccessMessage('Papeleta actualizada correctamente.')
       } else {
         await createPosition(payload)
-        setSuccessMessage('Cargo creado correctamente.')
+        setSuccessMessage('Papeleta creada correctamente.')
       }
 
       await refreshLists()
@@ -257,8 +258,12 @@ export default function ElectionManagement() {
     setEditingPositionId(position.id)
     setPositionForm({
       name: position.nombre || '',
-      faculty: position.facultad || '',
       electionId: position?.eleccion?.id || positionForm.electionId,
+      alcance: position.alcance || ALCANCE_PAPELETA.GLOBAL,
+      codFacultad: position.codFacultad || '',
+      facultadNombre: position.facultadNombre || '',
+      codCarrera: position.codCarrera || '',
+      carreraNombre: position.carreraNombre || '',
     })
   }
 
@@ -267,7 +272,7 @@ export default function ElectionManagement() {
     try {
       setIsSavingPosition(true)
       await deletePosition(positionId)
-      setSuccessMessage('Cargo eliminado correctamente.')
+      setSuccessMessage('Papeleta eliminada correctamente.')
       await refreshLists()
 
       if (editingPositionId === positionId) {
@@ -505,8 +510,10 @@ export default function ElectionManagement() {
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-base font-semibold text-blue-900">Cargos</h3>
-              <p className="mt-1 text-sm text-slate-700">Registra los cargos por elección.</p>
+              <h3 className="text-base font-semibold text-blue-900">Papeletas / Cargos</h3>
+              <p className="mt-1 text-sm text-slate-700">
+                Registre las papeletas del proceso con alcance global, por facultad o por carrera.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {editingPositionId ? (
@@ -531,8 +538,8 @@ export default function ElectionManagement() {
                 {isSavingPosition
                   ? 'Guardando…'
                   : editingPositionId
-                    ? 'Actualizar cargo'
-                    : 'Crear cargo'}
+                    ? 'Actualizar papeleta'
+                    : 'Crear papeleta'}
               </button>
             </div>
           </div>
@@ -545,42 +552,14 @@ export default function ElectionManagement() {
               </p>
             </div>
           ) : (
-            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Nombre del cargo">
-                <input
-                  value={positionForm.name}
-                  onChange={(e) => setPositionForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                  placeholder="Ej. Decano"
-                  disabled={isBusy}
-                />
-              </Field>
-
-              <Field label="Facultad">
-                <input
-                  value={positionForm.faculty}
-                  onChange={(e) => setPositionForm((prev) => ({ ...prev, faculty: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                  placeholder="Ej. FICCT"
-                  disabled={isBusy}
-                />
-              </Field>
-
-              <Field label="Elección">
-                <select
-                  value={positionForm.electionId}
-                  onChange={(e) => setPositionForm((prev) => ({ ...prev, electionId: e.target.value }))}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                  disabled={isBusy}
-                >
-                  {elections.map((election) => (
-                    <option key={election.id} value={election.id}>
-                      {election.titulo} ({election.gestion})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
+            <PapeletaForm
+              positionForm={positionForm}
+              setPositionForm={setPositionForm}
+              elections={elections}
+              isBusy={isBusy}
+              isEditing={Boolean(editingPositionId)}
+              onCatalogError={setErrorMessage}
+            />
           )}
 
           <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
@@ -588,7 +567,8 @@ export default function ElectionManagement() {
               <thead className="bg-slate-50">
                 <tr>
                   <Th>Cargo</Th>
-                  <Th>Facultad</Th>
+                  <Th>Alcance</Th>
+                  <Th>Ámbito</Th>
                   <Th>Elección</Th>
                   <Th>Acciones</Th>
                 </tr>
@@ -596,21 +576,24 @@ export default function ElectionManagement() {
               <tbody className="divide-y divide-slate-200 bg-white">
                 {isLoading ? (
                   <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={4}>
+                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={5}>
                       Cargando cargos…
                     </td>
                   </tr>
                 ) : positions.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={4}>
-                      No hay cargos registrados.
+                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={5}>
+                      No hay papeletas registradas.
                     </td>
                   </tr>
                 ) : (
                   positions.map((position) => (
                     <tr key={position.id}>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900">{position.nombre}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{position.facultad}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        {ALCANCE_LABELS[position.alcance] || position.alcance || ALCANCE_LABELS.GLOBAL}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{formatPositionAmbito(position)}</td>
                       <td className="px-4 py-3 text-sm text-slate-700">
                         {position?.eleccion ? `${position.eleccion.titulo} (${position.eleccion.gestion})` : '—'}
                       </td>
@@ -686,19 +669,6 @@ function validateElectionForm(form) {
   if (!form.dateLocal) return 'Seleccione la fecha de elección.'
   return ''
 }
-
-/**
- * Valida formulario de cargo.
- * @param {{ name: string, faculty: string, electionId: string }} form
- * @returns {string}
- */
-function validatePositionForm(form) {
-  if (!form.name?.trim()) return 'Ingrese el nombre del cargo.'
-  if (!form.faculty?.trim()) return 'Ingrese la facultad.'
-  if (!form.electionId) return 'Seleccione una elección.'
-  return ''
-}
-
 
 /**
  * Normaliza una fecha ISO o `YYYY-MM-DD` a valor compatible con `<input type="date" />`.

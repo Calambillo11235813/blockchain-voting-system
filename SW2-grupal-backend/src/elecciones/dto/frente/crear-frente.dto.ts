@@ -1,7 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 
-export class CrearCandidatoDto {
+export class CrearCandidatoAnidadoDto {
   @IsString()
   @IsNotEmpty()
   ci: string;
@@ -17,10 +24,15 @@ export class CrearCandidatoDto {
   @IsString()
   @IsOptional()
   fotoUrl?: string;
+
+  /** Obligatorio al crear candidatos junto con un frente por elección. */
+  @IsUUID()
+  @IsOptional()
+  eleccionCargoId?: string;
 }
 
 /**
- * DTO para crear un frente en un EleccionCargo específico.
+ * DTO para crear un frente en un proceso electoral.
  */
 export class CrearFrenteDto {
   @IsString()
@@ -35,12 +47,13 @@ export class CrearFrenteDto {
   @IsOptional()
   logoUrl?: string;
 
+  /** @deprecated Legacy — no usar en nuevos frentes. */
   @IsBoolean()
   @IsOptional()
   esOpcionGlobal?: boolean;
 
   @IsOptional()
   @ValidateNested({ each: true })
-  @Type(() => CrearCandidatoDto)
-  candidatos?: CrearCandidatoDto[];
+  @Type(() => CrearCandidatoAnidadoDto)
+  candidatos?: CrearCandidatoAnidadoDto[];
 }

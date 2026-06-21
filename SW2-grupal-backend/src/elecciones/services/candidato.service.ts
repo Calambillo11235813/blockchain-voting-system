@@ -1,14 +1,58 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ApiResponse, createApiResponse } from 'src/compartido/respuesta';
 import { Candidato } from 'src/elecciones/entities/candidato.entity';
 import { CrearCandidatoDto } from 'src/elecciones/dto/candidato/crear-candidato.dto';
 import { ActualizarCandidatoDto } from 'src/elecciones/dto/candidato/actualizar-candidato.dto';
 import { Frente } from 'src/elecciones/entities/frente.entity';
-import { BlockchainService } from 'src/blockchain/services/blockchain.service';
+import { EleccionCargo } from 'src/elecciones/entities/eleccion-cargo.entity';
+import { esRolValidoParaAlcance } from 'src/elecciones/enums/rol-candidato.constants';
 
+export interface DatosCandidatoTransaccion {
+  ci: string;
+  nombres: string;
+  apellidos: string;
+  fotoUrl?: string;
+  frenteId: string;
+  eleccionCargoId: string;
+  rolEspecifico?: string;
+}
 
+/**
+ * Valida que el frente y la papeleta pertenezcan al mismo proceso electoral.
+ */
+export function validarCoherenciaFrentePapeleta(frente: Frente, eleccionCargo: EleccionCargo): void {
+  const eleccionFrenteId = frente.eleccion?.id;
+  const eleccionPapeletaId = eleccionCargo.eleccion?.id;
+
+  if (!eleccionFrenteId || !eleccionPapeletaId) {
+    throw new BadRequestException('No se pudo verificar la elección del frente o la papeleta.');
+  }
+
+  if (eleccionFrenteId !== eleccionPapeletaId) {
+    throw new BadRequestException(
+      'El frente y la papeleta deben pertenecer al mismo proceso electoral.',
+    );
+  }
+}
+
+function validarRolEspecificoParaPapeleta(eleccionCargo: EleccionCargo, rolEspecifico: string): void {
+  if (!rolEspecifico?.trim()) {
+    throw new BadRequestException('Debe indicar el rol específico del candidato dentro de la fórmula.');
+  }
+
+  if (!esRolValidoParaAlcance(eleccionCargo.alcance, rolEspecifico.trim())) {
+    throw new BadRequestException(
+      `El rol "${rolEspecifico}" no es válido para una papeleta de alcance ${eleccionCargo.alcance}.`,
+    );
+  }
+}
 
 /**
  * Servicio de aplicacion para el dominio de candidatos.
@@ -20,23 +64,27 @@ export class CandidatoService {
     private readonly candidatoRepository: Repository<Candidato>,
     @InjectRepository(Frente)
     private readonly frenteRepository: Repository<Frente>,
-    private readonly blockchainService: BlockchainService,
+    @InjectRepository(EleccionCargo)
+    private readonly eleccionCargoRepository: Repository<EleccionCargo>,
   ) {}
 
-  /**
-   * Crea un candidato.
-   * @param crearCandidatoDto Datos del candidato.
-   * @returns Candidato creado.
-   */
   async crearCandidato(crearCandidatoDto: CrearCandidatoDto): Promise<ApiResponse<Candidato>> {
-    const frente = await this.buscarFrentePorIdOrThrow(crearCandidatoDto.frenteId);
+    const { frente, eleccionCargo } = await this.resolverFrenteYPapeleta(
+      crearCandidatoDto.frenteId,
+      crearCandidatoDto.eleccionCargoId,
+    );
+
+    validarCoherenciaFrentePapeleta(frente, eleccionCargo);
+    validarRolEspecificoParaPapeleta(eleccionCargo, crearCandidatoDto.rolEspecifico);
 
     const candidato = this.candidatoRepository.create({
       ci: crearCandidatoDto.ci,
       nombres: crearCandidatoDto.nombres,
       apellidos: crearCandidatoDto.apellidos,
       fotoUrl: crearCandidatoDto.fotoUrl ?? null,
+      rolEspecifico: crearCandidatoDto.rolEspecifico.trim(),
       frente,
+      eleccionCargo,
     });
 
     const guardado = await this.candidatoRepository.save(candidato);
@@ -44,92 +92,133 @@ export class CandidatoService {
   }
 
   /**
-   * Lista todos los candidatos.
-   * @returns Lista de candidatos.
+   * Crea un candidato dentro de una transacción existente (usado por FrenteService).
    */
-  async listarCandidatos(): Promise<ApiResponse<Candidato[]>> {
+  async crearCandidatoEnTransaccion(
+    manager: EntityManager,
+    datos: DatosCandidatoTransaccion,
+  ): Promise<Candidato> {
+    const frenteRepo = manager.getRepository(Frente);
+    const eleccionCargoRepo = manager.getRepository(EleccionCargo);
+    const candidatoRepo = manager.getRepository(Candidato);
+
+    const frente = await frenteRepo.findOne({
+      where: { id: datos.frenteId },
+      relations: { eleccion: true },
+    });
+    if (!frente) {
+      throw new NotFoundException(`No se encontró el frente con id ${datos.frenteId}`);
+    }
+
+    const eleccionCargo = await eleccionCargoRepo.findOne({
+      where: { id: datos.eleccionCargoId },
+      relations: { eleccion: true },
+    });
+    if (!eleccionCargo) {
+      throw new NotFoundException(`No se encontró la papeleta con id ${datos.eleccionCargoId}`);
+    }
+
+    validarCoherenciaFrentePapeleta(frente, eleccionCargo);
+    if (datos.rolEspecifico) {
+      validarRolEspecificoParaPapeleta(eleccionCargo, datos.rolEspecifico);
+    }
+
+    const candidato = candidatoRepo.create({
+      ci: datos.ci,
+      nombres: datos.nombres,
+      apellidos: datos.apellidos,
+      fotoUrl: datos.fotoUrl ?? null,
+      rolEspecifico: datos.rolEspecifico?.trim() ?? null,
+      frente,
+      eleccionCargo,
+    });
+
+    return candidatoRepo.save(candidato);
+  }
+
+  async listarCandidatos(eleccionId?: string): Promise<ApiResponse<Candidato[]>> {
     const candidatos = await this.candidatoRepository.find({
-      relations: { frente: true },
+      where: eleccionId ? { eleccionCargo: { eleccion: { id: eleccionId } } } : {},
+      relations: {
+        frente: { eleccion: true },
+        eleccionCargo: { cargo: true, eleccion: true },
+      },
       order: { apellidos: 'ASC', nombres: 'ASC' },
     });
 
     return createApiResponse(HttpStatus.OK, candidatos, 'Candidatos listados correctamente.');
   }
 
-  /**
-   * Obtiene un candidato por ID.
-   * @param candidatoId Identificador UUID del candidato.
-   * @returns Candidato encontrado.
-   */
   async obtenerCandidatoPorId(candidatoId: string): Promise<ApiResponse<Candidato>> {
     const candidato = await this.buscarCandidatoPorIdOrThrow(candidatoId);
     return createApiResponse(HttpStatus.OK, candidato, 'Candidato obtenido correctamente.');
   }
 
-  /**
-   * Actualiza un candidato por ID.
-   * @param candidatoId Identificador UUID del candidato.
-   * @param actualizarCandidatoDto Campos a actualizar.
-   * @returns Candidato actualizado.
-   */
   async actualizarCandidato(
     candidatoId: string,
     actualizarCandidatoDto: ActualizarCandidatoDto,
   ): Promise<ApiResponse<Candidato>> {
     const candidato = await this.buscarCandidatoPorIdOrThrow(candidatoId);
 
-    if (actualizarCandidatoDto.frenteId) {
-      candidato.frente = await this.buscarFrentePorIdOrThrow(actualizarCandidatoDto.frenteId);
-    }
+    const frenteId = actualizarCandidatoDto.frenteId ?? candidato.frente.id;
+    const eleccionCargoId =
+      actualizarCandidatoDto.eleccionCargoId ?? candidato.eleccionCargo.id;
 
+    const { frente, eleccionCargo } = await this.resolverFrenteYPapeleta(frenteId, eleccionCargoId);
+    validarCoherenciaFrentePapeleta(frente, eleccionCargo);
+
+    const rolEspecifico =
+      actualizarCandidatoDto.rolEspecifico ?? candidato.rolEspecifico ?? '';
+    validarRolEspecificoParaPapeleta(eleccionCargo, rolEspecifico);
+
+    candidato.frente = frente;
+    candidato.eleccionCargo = eleccionCargo;
     candidato.ci = actualizarCandidatoDto.ci ?? candidato.ci;
     candidato.nombres = actualizarCandidatoDto.nombres ?? candidato.nombres;
     candidato.apellidos = actualizarCandidatoDto.apellidos ?? candidato.apellidos;
     candidato.fotoUrl = actualizarCandidatoDto.fotoUrl ?? candidato.fotoUrl;
+    candidato.rolEspecifico = rolEspecifico.trim();
 
     const actualizado = await this.candidatoRepository.save(candidato);
     return createApiResponse(HttpStatus.OK, actualizado, 'Candidato actualizado correctamente.');
   }
 
-  /**
-   * Elimina un candidato por ID.
-   * @param candidatoId Identificador UUID del candidato.
-   * @returns Resultado de eliminacion.
-   */
   async eliminarCandidato(candidatoId: string): Promise<ApiResponse<null>> {
     const candidato = await this.buscarCandidatoPorIdOrThrow(candidatoId);
     await this.candidatoRepository.remove(candidato);
     return createApiResponse(HttpStatus.OK, null, 'Candidato eliminado correctamente.');
   }
 
-
-
-  /**
-   * Busca un frente por ID o lanza excepcion.
-   * @param frenteId Identificador UUID del frente.
-   * @returns Frente encontrado.
-   * @throws NotFoundException Si el frente no existe.
-   */
-  private async buscarFrentePorIdOrThrow(frenteId: string): Promise<Frente> {
-    const frente = await this.frenteRepository.findOne({ where: { id: frenteId } });
-
+  private async resolverFrenteYPapeleta(
+    frenteId: string,
+    eleccionCargoId: string,
+  ): Promise<{ frente: Frente; eleccionCargo: EleccionCargo }> {
+    const frente = await this.frenteRepository.findOne({
+      where: { id: frenteId },
+      relations: { eleccion: true },
+    });
     if (!frente) {
       throw new NotFoundException(`No se encontro el frente con id ${frenteId}`);
     }
 
-    return frente;
+    const eleccionCargo = await this.eleccionCargoRepository.findOne({
+      where: { id: eleccionCargoId },
+      relations: { eleccion: true },
+    });
+    if (!eleccionCargo) {
+      throw new NotFoundException(`No se encontro la papeleta con id ${eleccionCargoId}`);
+    }
+
+    return { frente, eleccionCargo };
   }
 
-  /**
-   * Busca un candidato por ID o lanza excepcion.
-   * @param candidatoId Identificador UUID del candidato.
-   * @returns Candidato encontrado.
-   * @throws NotFoundException Si el candidato no existe.
-   */
   private async buscarCandidatoPorIdOrThrow(candidatoId: string): Promise<Candidato> {
     const candidato = await this.candidatoRepository.findOne({
       where: { id: candidatoId },
-      relations: { frente: true },
+      relations: {
+        frente: { eleccion: true },
+        eleccionCargo: { cargo: true, eleccion: true },
+      },
     });
 
     if (!candidato) {
