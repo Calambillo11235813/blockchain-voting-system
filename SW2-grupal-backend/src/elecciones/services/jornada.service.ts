@@ -3,14 +3,18 @@ import {
   ForbiddenException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Eleccion } from '../entities/eleccion.entity';
+import { EleccionCargo } from '../entities/eleccion-cargo.entity';
 import { EstadoEleccionEnum } from '../enums/estado-eleccion.enum';
 import { ApiResponse, createApiResponse } from '../../compartido/respuesta';
 import { ConfiguracionService } from './configuracion.service';
+import { BlockchainService } from 'src/blockchain/services/blockchain.service';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -39,11 +43,15 @@ export interface EstadoJornada {
 export class JornadaService {
   private static readonly VOTING_START_HOUR = 8;
   private static readonly VOTING_END_HOUR = 16;
+  private readonly logger = new Logger(JornadaService.name);
 
   constructor(
     @InjectRepository(Eleccion)
     private readonly eleccionRepository: Repository<Eleccion>,
+    @InjectRepository(EleccionCargo)
+    private readonly eleccionCargoRepository: Repository<EleccionCargo>,
     private readonly configuracionService: ConfiguracionService,
+    private readonly blockchainService: BlockchainService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -123,6 +131,18 @@ export class JornadaService {
       eleccion.estado = EstadoEleccionEnum.ACTIVA;
       const guardada = await this.eleccionRepository.save(eleccion);
 
+      try {
+        await this.activarPapeletasOnChain(guardada.id);
+      } catch (error: any) {
+        guardada.estaActiva = false;
+        guardada.estado = EstadoEleccionEnum.SELLADA;
+        await this.eleccionRepository.save(guardada);
+
+        throw new ServiceUnavailableException(
+          `La jornada se abrió en base de datos, pero falló la activación on-chain: ${error.message || error}`,
+        );
+      }
+
       return createApiResponse(
         HttpStatus.OK,
         guardada,
@@ -180,6 +200,54 @@ export class JornadaService {
   // ═══════════════════════════════════════════════════════════════════════════
   //  MÉTODOS PRIVADOS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Activa on-chain todas las papeletas de una elección recién abierta.
+   */
+  private async activarPapeletasOnChain(eleccionId: string): Promise<void> {
+    if (process.env.ENABLE_BLOCKCHAIN !== 'true') {
+      this.logger.warn(
+        `ENABLE_BLOCKCHAIN=false: se omitió la activación on-chain de papeletas para la elección ${eleccionId}.`,
+      );
+      return;
+    }
+
+    const papeletas = await this.eleccionCargoRepository.find({
+      where: { eleccion: { id: eleccionId } },
+      order: { orden: 'ASC' },
+    });
+
+    if (papeletas.length === 0) {
+      throw new BadRequestException(
+        'No hay papeletas configuradas para activar on-chain en esta elección.',
+      );
+    }
+
+    const privateKey = this.getVotingWalletPrivateKey();
+
+    for (const papeleta of papeletas) {
+      await this.blockchainService.configurarEleccionActiva(
+        papeleta.id,
+        true,
+        privateKey,
+      );
+    }
+  }
+
+  private getVotingWalletPrivateKey(): string {
+    const privateKey =
+      process.env.VOTING_WALLET_PRIVATE_KEY ||
+      process.env.WALLET_PRIVATE_KEY ||
+      '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+
+    if (privateKey.trim() === 'example_wallet_private_key_change_me') {
+      throw new ServiceUnavailableException(
+        'La clave privada institucional no está configurada o no es válida.',
+      );
+    }
+
+    return privateKey;
+  }
 
   /**
    * Busca una elección por ID o lanza NotFoundException.

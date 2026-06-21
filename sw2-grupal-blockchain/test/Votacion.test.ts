@@ -127,4 +127,175 @@ describe("Votacion (Hash-Based)", () => {
     expect(await votacion.obtenerVotos(eleccionId, candidatoA)).to.equal(1);
     expect(await votacion.obtenerVotos(eleccionId, candidatoB)).to.equal(0);
   });
+
+  describe("votarBatch", () => {
+    const rectorado = ethers.keccak256(ethers.toUtf8Bytes("papeleta-rectorado-001"));
+    const decanato = ethers.keccak256(ethers.toUtf8Bytes("papeleta-decanato-001"));
+    const carrera = ethers.keccak256(ethers.toUtf8Bytes("papeleta-carrera-001"));
+    const candRectorado = ethers.keccak256(ethers.toUtf8Bytes("frente-rectorado-A"));
+    const candDecanato = ethers.keccak256(ethers.toUtf8Bytes("frente-decanato-B"));
+    const candCarrera = ethers.keccak256(ethers.toUtf8Bytes("frente-carrera-C"));
+
+    async function activarCrucero(votacion: Votacion) {
+      await votacion.configurarEleccionActiva(rectorado, true);
+      await votacion.configurarEleccionActiva(decanato, true);
+      await votacion.configurarEleccionActiva(carrera, true);
+    }
+
+    it("Caso 12: registra batch estudiantil en 3 papeletas concurrentes", async () => {
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await votacion.votarBatch(
+        [rectorado, decanato, carrera],
+        [candRectorado, candDecanato, candCarrera],
+        elector1,
+        0
+      );
+
+      expect(await votacion.obtenerVotos(rectorado, candRectorado)).to.equal(1);
+      expect(await votacion.obtenerVotos(decanato, candDecanato)).to.equal(1);
+      expect(await votacion.obtenerVotos(carrera, candCarrera)).to.equal(1);
+      expect(await votacion.obtenerTotalVotos(rectorado)).to.equal(1);
+      expect(await votacion.obtenerTotalVotos(decanato)).to.equal(1);
+      expect(await votacion.obtenerTotalVotos(carrera)).to.equal(1);
+      expect(await votacion.totalVotosGlobal()).to.equal(3);
+
+      expect(await votacion.obtenerVotosEstudiantes(rectorado, candRectorado)).to.equal(1);
+      expect(await votacion.obtenerVotosEstudiantes(decanato, candDecanato)).to.equal(1);
+      expect(await votacion.obtenerVotosEstudiantes(carrera, candCarrera)).to.equal(1);
+      expect(await votacion.obtenerVotosDocentes(rectorado, candRectorado)).to.equal(0);
+    });
+
+    it("Caso 13: registra batch docente con conteo paritario separado", async () => {
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await votacion.votarBatch(
+        [rectorado, decanato, carrera],
+        [candRectorado, candDecanato, candCarrera],
+        elector2,
+        1
+      );
+
+      expect(await votacion.obtenerVotosDocentes(rectorado, candRectorado)).to.equal(1);
+      expect(await votacion.obtenerVotosDocentes(decanato, candDecanato)).to.equal(1);
+      expect(await votacion.obtenerVotosDocentes(carrera, candCarrera)).to.equal(1);
+      expect(await votacion.obtenerVotosEstudiantes(rectorado, candRectorado)).to.equal(0);
+
+      const [estudiantes, docentes] = await votacion.obtenerVotosPorEstamento(
+        rectorado,
+        candRectorado
+      );
+      expect(estudiantes).to.equal(0);
+      expect(docentes).to.equal(1);
+    });
+
+    it("Caso 14: emite VotoBatchRegistrado por cada voto del lote", async () => {
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await expect(
+        votacion.votarBatch(
+          [rectorado, decanato],
+          [candRectorado, candDecanato],
+          elector1,
+          0
+        )
+      )
+        .to.emit(votacion, "VotoBatchRegistrado")
+        .withArgs(rectorado, candRectorado, elector1, 0, (ts: bigint) => ts > 0n)
+        .and.to.emit(votacion, "VotoBatchRegistrado")
+        .withArgs(decanato, candDecanato, elector1, 0, (ts: bigint) => ts > 0n);
+    });
+
+    it("Caso 15: revierte si los arreglos tienen longitudes distintas", async () => {
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await expect(
+        votacion.votarBatch([rectorado, decanato], [candRectorado], elector1, 0)
+      ).to.be.revertedWith("Error: Los arreglos deben tener la misma longitud.");
+    });
+
+    it("Caso 16: revierte si el estamento es invalido", async () => {
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await expect(
+        votacion.votarBatch([rectorado], [candRectorado], elector1, 2)
+      ).to.be.revertedWith("Error: El estamento debe ser 0 (Estudiante) o 1 (Docente).");
+    });
+
+    it("Caso 17: revierte si la eleccion no esta activa", async () => {
+      const votacion = await desplegarContrato();
+
+      await expect(
+        votacion.votarBatch([rectorado], [candRectorado], elector1, 0)
+      ).to.be.revertedWith("Error: La eleccion no esta activa o no existe.");
+    });
+
+    it("Caso 18: revierte si la eleccion fue cerrada", async () => {
+      const votacion = await desplegarContrato();
+      await votacion.configurarEleccionActiva(rectorado, true);
+      await votacion.configurarEleccionActiva(rectorado, false);
+
+      await expect(
+        votacion.votarBatch([rectorado], [candRectorado], elector1, 0)
+      ).to.be.revertedWith("Error: La eleccion no esta activa o no existe.");
+    });
+
+    it("Caso 19: revierte doble voto del mismo elector en la misma papeleta", async () => {
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await votacion.votarBatch([rectorado], [candRectorado], elector1, 0);
+
+      await expect(
+        votacion.votarBatch([rectorado], [candDecanato], elector1, 0)
+      ).to.be.revertedWith("Error: El elector ya emitio su voto en esta eleccion.");
+    });
+
+    it("Caso 20: revierte y no aplica efectos parciales si hay papeleta duplicada en el lote", async () => {
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await expect(
+        votacion.votarBatch(
+          [rectorado, rectorado, decanato],
+          [candRectorado, candDecanato, candDecanato],
+          elector1,
+          0
+        )
+      ).to.be.revertedWith("Error: El elector ya emitio su voto en esta eleccion.");
+
+      expect(await votacion.obtenerVotos(rectorado, candRectorado)).to.equal(0);
+      expect(await votacion.obtenerVotos(decanato, candDecanato)).to.equal(0);
+      expect(await votacion.verificarVoto(rectorado, elector1)).to.equal(false);
+      expect(await votacion.totalVotosGlobal()).to.equal(0);
+    });
+
+    it("Caso 21: solo el admin puede ejecutar votarBatch", async () => {
+      const [, noAdmin] = await ethers.getSigners();
+      const votacion = await desplegarContrato();
+      await activarCrucero(votacion);
+
+      await expect(
+        votacion.connect(noAdmin).votarBatch(
+          [rectorado],
+          [candRectorado],
+          elector1,
+          0
+        )
+      ).to.be.revertedWith("Error: Solo el administrador puede ejecutar esta funcion.");
+    });
+
+    it("Caso 22: revierte con lote vacio", async () => {
+      const votacion = await desplegarContrato();
+
+      await expect(
+        votacion.votarBatch([], [], elector1, 0)
+      ).to.be.revertedWith("Error: El lote debe contener al menos un voto.");
+    });
+  });
 });

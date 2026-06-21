@@ -27,8 +27,9 @@ export class RegistroSufragio {
   @CreateDateColumn({ type: 'timestamp' })
   fechaSufragio: Date;
 
-  @Index({ unique: true })
-  @Column('text', { nullable: false, unique: true })
+  /** Hash de la transacción blockchain; puede repetirse en votación batch atómica. */
+  @Index()
+  @Column('text', { nullable: false })
   hashTransaccion: string;
 
   // ─── Relaciones ──────────────────────────────────────────────────────────────

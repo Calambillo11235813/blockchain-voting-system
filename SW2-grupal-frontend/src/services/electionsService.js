@@ -356,7 +356,7 @@ export async function deletePosition(positionId) {
  *
  * Importante:
  * - Este endpoint devuelve el objeto directamente (no viene envuelto en ApiResponse).
- * - Si se pasa `registro`, el backend filtra cargos según habilitación Rector del elector.
+   * - Si se pasa `registro`, el backend filtra cargos según alcance territorial y elegibilidad del elector.
  *
  * @param {string} electionId
  * @param {string} [registro] Número de registro del elector autenticado.

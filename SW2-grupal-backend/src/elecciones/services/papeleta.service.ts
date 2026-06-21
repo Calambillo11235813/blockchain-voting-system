@@ -68,6 +68,52 @@ export class PapeletaService {
     eleccionId: string,
     registro?: string,
   ): Promise<PapeletaDigital> {
+    const eleccion = await this.cargarEleccionConCargos(eleccionId);
+
+    if (registro?.trim()) {
+      return this.obtenerPapeletasParaVotante(eleccion, registro.trim());
+    }
+
+    const cargosOrdenados = this.ordenarCargos(eleccion.eleccionCargos);
+
+    return this.armarPapeletaDigital(eleccion, cargosOrdenados);
+  }
+
+  /**
+   * Devuelve solo las papeletas aplicables al elector autenticado según alcance territorial.
+   *
+   * Regla: GLOBAL siempre (salvo habilitadoRector=false en Rector) OR
+   * FACULTAD si coincide facultad OR CARRERA si coincide facultad y carrera.
+   */
+  async obtenerPapeletasParaVotante(
+    eleccion: Eleccion,
+    registro: string,
+  ): Promise<PapeletaDigital> {
+    const elector = await this.electorRepository.findOne({
+      where: [{ registro }, { registroDocente: registro }],
+    });
+
+    if (!elector) {
+      return this.armarPapeletaDigital(eleccion, []);
+    }
+
+    const entradaPadron = await this.padronElectoralRepository.findOne({
+      where: {
+        eleccion: { id: eleccion.id },
+        elector: { id: elector.id },
+      },
+    });
+
+    const cargosOrdenados = this.papeletaEligibilityService.filtrarPapeletasAplicables(
+      elector,
+      this.ordenarCargos(eleccion.eleccionCargos),
+      entradaPadron,
+    );
+
+    return this.armarPapeletaDigital(eleccion, cargosOrdenados);
+  }
+
+  private async cargarEleccionConCargos(eleccionId: string): Promise<Eleccion> {
     const eleccion = await this.eleccionRepository.findOne({
       where: { id: eleccionId },
       relations: {
@@ -84,34 +130,17 @@ export class PapeletaService {
       throw new NotFoundException(`No se encontro la eleccion con id ${eleccionId}`);
     }
 
-    let cargosOrdenados = [...eleccion.eleccionCargos].sort((a, b) => {
+    return eleccion;
+  }
+
+  private ordenarCargos(cargos: EleccionCargo[]): EleccionCargo[] {
+    return [...cargos].sort((a, b) => {
       if (a.orden !== b.orden) return a.orden - b.orden;
       return a.cargo.nombre.localeCompare(b.cargo.nombre);
     });
+  }
 
-    if (registro?.trim()) {
-      const elector = await this.electorRepository.findOne({
-        where: [{ registro: registro.trim() }, { registroDocente: registro.trim() }],
-      });
-
-      if (elector) {
-        const entradaPadron = await this.padronElectoralRepository.findOne({
-          where: {
-            eleccion: { id: eleccionId },
-            elector: { id: elector.id },
-          },
-        });
-
-        cargosOrdenados = this.papeletaEligibilityService.filtrarPapeletasAplicables(
-          elector,
-          cargosOrdenados,
-          entradaPadron,
-        );
-      } else {
-        cargosOrdenados = [];
-      }
-    }
-
+  private armarPapeletaDigital(eleccion: Eleccion, cargos: EleccionCargo[]): PapeletaDigital {
     return {
       id: eleccion.id,
       titulo: eleccion.titulo,
@@ -119,7 +148,7 @@ export class PapeletaService {
       fecha: eleccion.fecha,
       estaActiva: eleccion.estaActiva,
       estado: eleccion.estado,
-      cargos: cargosOrdenados.map((ec) => this.serializarPapeleta(ec)),
+      cargos: cargos.map((ec) => this.serializarPapeleta(ec)),
     };
   }
 

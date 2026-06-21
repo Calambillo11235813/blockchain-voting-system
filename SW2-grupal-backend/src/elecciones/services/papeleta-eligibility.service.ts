@@ -14,6 +14,44 @@ export class PapeletaEligibilityService {
     return String(valor ?? '').trim();
   }
 
+  private normalizarTexto(valor?: string | null): string {
+    return String(valor ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private coincideFacultad(elector: Elector, eleccionCargo: EleccionCargo): boolean {
+    const codElector = this.normalizarCodigo(elector.codFacultad);
+    const codPapeleta = this.normalizarCodigo(eleccionCargo.codFacultad);
+
+    if (codPapeleta && codElector) {
+      return codElector === codPapeleta;
+    }
+
+    const facElector = this.normalizarTexto(elector.facultad);
+    const facPapeleta = this.normalizarTexto(
+      eleccionCargo.facultadNombre ?? eleccionCargo.cargo?.facultad,
+    );
+
+    return facElector !== '' && facPapeleta !== '' && facElector === facPapeleta;
+  }
+
+  private coincideCarrera(elector: Elector, eleccionCargo: EleccionCargo): boolean {
+    const codCarreraPapeleta = this.normalizarCodigo(eleccionCargo.codCarrera);
+    const codCarreraElector = this.normalizarCodigo(elector.codCarrera);
+
+    if (codCarreraPapeleta && codCarreraElector) {
+      return codCarreraElector === codCarreraPapeleta;
+    }
+
+    const carreraElector = this.normalizarTexto(elector.carrera);
+    const carreraPapeleta = this.normalizarTexto(eleccionCargo.carreraNombre);
+
+    return carreraElector !== '' && carreraPapeleta !== '' && carreraElector === carreraPapeleta;
+  }
+
   esCargoRector(eleccionCargo: EleccionCargo): boolean {
     const tipo = eleccionCargo.cargo?.tipoCargo;
     if (tipo === TipoCargoEnum.RECTOR) {
@@ -43,34 +81,18 @@ export class PapeletaEligibilityService {
       return true;
     }
 
-    const codFacElector = this.normalizarCodigo(elector.codFacultad);
-    const codFacPapeleta = this.normalizarCodigo(eleccionCargo.codFacultad);
-
     if (eleccionCargo.alcance === AlcancePapeletaEnum.FACULTAD) {
-      if (!codFacPapeleta || !codFacElector) {
-        return false;
-      }
-      return codFacElector === codFacPapeleta;
+      return this.coincideFacultad(elector, eleccionCargo);
     }
 
     if (eleccionCargo.alcance === AlcancePapeletaEnum.CARRERA) {
-      const codCarreraPapeleta = this.normalizarCodigo(eleccionCargo.codCarrera);
-
-      if (!codFacPapeleta || !codCarreraPapeleta || !codFacElector) {
-        return false;
-      }
-
-      if (codFacElector !== codFacPapeleta) {
+      if (!this.coincideFacultad(elector, eleccionCargo)) {
         return false;
       }
 
       // Estudiantes: deben pertenecer a la carrera concreta.
       if (elector.estamento === EstamentoEnum.ESTUDIANTE) {
-        const codCarreraElector = this.normalizarCodigo(elector.codCarrera);
-        if (!codCarreraElector) {
-          return false;
-        }
-        return codCarreraElector === codCarreraPapeleta;
+        return this.coincideCarrera(elector, eleccionCargo);
       }
 
       // Docentes transversales: dictan en varias carreras; basta la facultad.
@@ -84,7 +106,7 @@ export class PapeletaEligibilityService {
         if (!codCarreraElector) {
           return true;
         }
-        return codCarreraElector === codCarreraPapeleta;
+        return this.coincideCarrera(elector, eleccionCargo);
       }
 
       return false;

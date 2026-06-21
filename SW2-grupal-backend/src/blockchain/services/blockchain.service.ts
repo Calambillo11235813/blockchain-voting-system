@@ -4,11 +4,27 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ParametroSistema } from '../../elecciones/entities/parametro-sistema.entity';
 import VotacionAbi from '../abi/VotacionABI.json';
+import { VOTO_BLANCO_ID } from '../../elecciones/constants/voto-blanco.constant';
 
 interface VotacionContract {
   votar(eleccionHash: string, candidatoHash: string, electorHash: string): Promise<ethers.ContractTransactionResponse>;
+  votarBatch(
+    elecciones: string[],
+    candidatos: string[],
+    electorHash: string,
+    estamento: number,
+  ): Promise<ethers.ContractTransactionResponse>;
+  configurarEleccionActiva(eleccionHash: string, activa: boolean): Promise<ethers.ContractTransactionResponse>;
   obtenerVotos(eleccionHash: string, candidatoHash: string): Promise<bigint>;
+  obtenerVotosEstudiantes(eleccionHash: string, candidatoHash: string): Promise<bigint>;
+  obtenerVotosDocentes(eleccionHash: string, candidatoHash: string): Promise<bigint>;
   connect(signer: ethers.Signer): VotacionContract;
+}
+
+export interface VotosParitarios {
+  total: number;
+  estudiantes: number;
+  docentes: number;
 }
 
 /**
@@ -79,6 +95,20 @@ export class BlockchainService implements OnModuleInit {
     return this.provider;
   }
 
+  /**
+   * Hashea un identificador off-chain (UUID de papeleta, frente, elector o literal "BLANCO").
+   * El valor {@link VOTO_BLANCO_ID} produce un bytes32 válido y estable para votos en blanco.
+   */
+  private hashUuid(id: string): string {
+    return ethers.keccak256(ethers.toUtf8Bytes(id));
+  }
+
+  private createWallet(privateKey: string): ethers.Wallet {
+    const trimmedKey = privateKey.trim();
+    const normalizedKey = trimmedKey.startsWith('0x') ? trimmedKey : `0x${trimmedKey}`;
+    return new ethers.Wallet(normalizedKey, this.getProvider());
+  }
+
   private async getContract(): Promise<VotacionContract> {
     const address = await this.getActiveContractAddress();
     const abi = (VotacionAbi as { abi?: unknown }).abi ?? VotacionAbi;
@@ -97,17 +127,76 @@ export class BlockchainService implements OnModuleInit {
    * @returns Hash de la transaccion enviada.
    */
   async registrarVoto(papeletaId: string, frenteId: string, electorId: string, privateKey: string): Promise<string> {
-    const trimmedKey = privateKey.trim();
-    const normalizedKey = trimmedKey.startsWith('0x') ? trimmedKey : `0x${trimmedKey}`;
-    const wallet = new ethers.Wallet(normalizedKey, this.getProvider());
+    const wallet = this.createWallet(privateKey);
     const contractInstance = await this.getContract();
     const contractWithSigner = contractInstance.connect(wallet);
 
-    const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(papeletaId));
-    const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(frenteId));
-    const electorHash = ethers.keccak256(ethers.toUtf8Bytes(electorId));
+    const eleccionHash = this.hashUuid(papeletaId);
+    const candidatoHash = this.hashUuid(frenteId);
+    const electorHash = this.hashUuid(electorId);
 
     const tx = await contractWithSigner.votar(eleccionHash, candidatoHash, electorHash);
+    await tx.wait();
+    return tx.hash;
+  }
+
+  /**
+   * Activa o cierra una papeleta/elección on-chain para recibir votos batch.
+   * @param papeletaId UUID de la papeleta (EleccionCargo).
+   * @param activa true para habilitar, false para cerrar.
+   * @param privateKey Llave privada de la wallet institucional.
+   * @returns Hash de la transacción enviada.
+   */
+  async configurarEleccionActiva(
+    papeletaId: string,
+    activa: boolean,
+    privateKey: string,
+  ): Promise<string> {
+    const wallet = this.createWallet(privateKey);
+    const contractInstance = await this.getContract();
+    const contractWithSigner = contractInstance.connect(wallet);
+    const eleccionHash = this.hashUuid(papeletaId);
+
+    const tx = await contractWithSigner.configurarEleccionActiva(eleccionHash, activa);
+    await tx.wait();
+    return tx.hash;
+  }
+
+  /**
+   * Registra un lote de votos en una sola transacción atómica (flujo Crucero).
+   * @param papeletasIds UUIDs de las papeletas (EleccionCargo).
+   * @param frentesIds UUIDs de frentes o {@link VOTO_BLANCO_ID} por voto en blanco (paralelos a papeletasIds).
+   * @param electorId UUID del elector.
+   * @param estamento 0 = Estudiante, 1 = Docente.
+   * @param privateKey Llave privada de la wallet institucional.
+   * @returns Hash de la transacción enviada.
+   */
+  async registrarVotoBatch(
+    papeletasIds: string[],
+    frentesIds: string[],
+    electorId: string,
+    estamento: number,
+    privateKey: string,
+  ): Promise<string> {
+    if (papeletasIds.length !== frentesIds.length) {
+      throw new BadRequestException('Los arreglos de papeletas y frentes deben tener la misma longitud.');
+    }
+    if (papeletasIds.length === 0) {
+      throw new BadRequestException('El lote debe contener al menos un voto.');
+    }
+    if (estamento !== 0 && estamento !== 1) {
+      throw new BadRequestException('El estamento debe ser 0 (Estudiante) o 1 (Docente).');
+    }
+
+    const wallet = this.createWallet(privateKey);
+    const contractInstance = await this.getContract();
+    const contractWithSigner = contractInstance.connect(wallet);
+
+    const elecciones = papeletasIds.map((id) => this.hashUuid(id));
+    const candidatos = frentesIds.map((id) => this.hashUuid(id));
+    const electorHash = this.hashUuid(electorId);
+
+    const tx = await contractWithSigner.votarBatch(elecciones, candidatos, electorHash, estamento);
     await tx.wait();
     return tx.hash;
   }
@@ -119,12 +208,33 @@ export class BlockchainService implements OnModuleInit {
    * @returns Cantidad de votos
    */
   async obtenerVotos(papeletaId: string, frenteId: string): Promise<number> {
-    const eleccionHash = ethers.keccak256(ethers.toUtf8Bytes(papeletaId));
-    const candidatoHash = ethers.keccak256(ethers.toUtf8Bytes(frenteId));
-    
+    const eleccionHash = this.hashUuid(papeletaId);
+    const candidatoHash = this.hashUuid(frenteId);
+
     const contractInstance = await this.getContract();
     const votos = await contractInstance.obtenerVotos(eleccionHash, candidatoHash);
     return Number(votos);
+  }
+
+  /**
+   * Obtiene el desglose paritario de votos on-chain para un frente en una papeleta.
+   */
+  async obtenerVotosParitarios(papeletaId: string, frenteId: string): Promise<VotosParitarios> {
+    const eleccionHash = this.hashUuid(papeletaId);
+    const candidatoHash = this.hashUuid(frenteId);
+    const contractInstance = await this.getContract();
+
+    const [total, estudiantes, docentes] = await Promise.all([
+      contractInstance.obtenerVotos(eleccionHash, candidatoHash),
+      contractInstance.obtenerVotosEstudiantes(eleccionHash, candidatoHash),
+      contractInstance.obtenerVotosDocentes(eleccionHash, candidatoHash),
+    ]);
+
+    return {
+      total: Number(total),
+      estudiantes: Number(estudiantes),
+      docentes: Number(docentes),
+    };
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -181,6 +291,12 @@ export class BlockchainService implements OnModuleInit {
           datosDecodificados.eleccionHash = typeof parsed.args[0] === 'string' ? parsed.args[0] : parsed.args[0].toString();
           datosDecodificados.candidatoHash = typeof parsed.args[1] === 'string' ? parsed.args[1] : parsed.args[1].toString();
           datosDecodificados.electorHash = typeof parsed.args[2] === 'string' ? parsed.args[2] : parsed.args[2].toString();
+        }
+        if (parsed.name === 'votarBatch') {
+          datosDecodificados.elecciones = parsed.args[0];
+          datosDecodificados.candidatos = parsed.args[1];
+          datosDecodificados.electorHash = typeof parsed.args[2] === 'string' ? parsed.args[2] : parsed.args[2].toString();
+          datosDecodificados.estamento = Number(parsed.args[3]);
         }
       }
     } catch (e) {

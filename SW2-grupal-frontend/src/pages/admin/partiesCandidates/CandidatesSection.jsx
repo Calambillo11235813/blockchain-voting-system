@@ -8,6 +8,8 @@ import {
 import { handleMutationApiError } from '../../../utils/apiErrorUtils'
 import { READ_ONLY_ELECTION_HELP } from '../../../utils/electionConstants'
 import {
+  ALCANCE_LABELS,
+  ALCANCE_PAPELETA,
   formatAmbito,
   formatPapeletaLabel,
   getRolesForPapeleta,
@@ -21,6 +23,36 @@ import {
   validateCandidateForm,
   validateImageFile,
 } from './shared'
+
+/** @typedef {'TODOS' | import('../../../utils/papeletaConstants').AlcancePapeleta} FiltroAlcanceCandidatos */
+
+const FILTRO_ALCANCE_OPCIONES = [
+  { value: 'TODOS', label: 'Todos' },
+  { value: ALCANCE_PAPELETA.GLOBAL, label: ALCANCE_LABELS.GLOBAL },
+  { value: ALCANCE_PAPELETA.FACULTAD, label: ALCANCE_LABELS.FACULTAD },
+  { value: ALCANCE_PAPELETA.CARRERA, label: ALCANCE_LABELS.CARRERA },
+]
+
+/**
+ * Resuelve la papeleta asociada a un candidato.
+ * @param {object} candidate
+ * @param {Map<string, object>} papeletaById
+ * @returns {object | null}
+ */
+function resolveCandidatePapeleta(candidate, papeletaById) {
+  const cargoId = candidate?.eleccionCargo?.id
+  if (candidate?.eleccionCargo) return candidate.eleccionCargo
+  if (cargoId) return papeletaById.get(cargoId) ?? null
+  return null
+}
+
+/**
+ * @param {object | null} papeleta
+ * @returns {string}
+ */
+function resolvePapeletaAlcance(papeleta) {
+  return papeleta?.alcance || ALCANCE_PAPELETA.GLOBAL
+}
 
 /**
  * Gestión de Candidatos.
@@ -57,6 +89,7 @@ export default function CandidatesSection({
   setWarningMessage,
 }) {
   const [editingCandidateId, setEditingCandidateId] = useState('')
+  const [filtroAlcance, setFiltroAlcance] = useState(/** @type {FiltroAlcanceCandidatos} */ ('TODOS'))
 
   const [candidateForm, setCandidateForm] = useState(() => ({
     ci: '',
@@ -108,7 +141,20 @@ export default function CandidatesSection({
     [selectedPapeleta],
   )
 
+  const filteredCandidates = useMemo(() => {
+    if (filtroAlcance === 'TODOS') return candidates
+
+    return candidates.filter((candidate) => {
+      const papeleta = resolveCandidatePapeleta(candidate, papeletaById)
+      return resolvePapeletaAlcance(papeleta) === filtroAlcance
+    })
+  }, [candidates, filtroAlcance, papeletaById])
+
   const formDisabled = isBusy || isElectionReadOnly
+
+  useEffect(() => {
+    setFiltroAlcance('TODOS')
+  }, [eleccionId])
 
   useEffect(() => {
     if (!isElectionReadOnly) return
@@ -423,7 +469,49 @@ export default function CandidatesSection({
         </Field>
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
+      <div className="mt-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">
+              Filtrar por ámbito
+            </p>
+            <p className="mt-0.5 text-xs text-slate-600">
+              Segmenta la tabla según el alcance de la papeleta del candidato.
+            </p>
+          </div>
+          <p className="text-xs text-slate-600">
+            {filteredCandidates.length} de {candidates.length} candidato
+            {candidates.length === 1 ? '' : 's'}
+          </p>
+        </div>
+
+        <div
+          className="mt-3 flex flex-wrap gap-2"
+          role="group"
+          aria-label="Filtro por ámbito de papeleta"
+        >
+          {FILTRO_ALCANCE_OPCIONES.map((opcion) => {
+            const isActive = filtroAlcance === opcion.value
+            return (
+              <button
+                key={opcion.value}
+                type="button"
+                onClick={() => setFiltroAlcance(opcion.value)}
+                disabled={isBusy}
+                className={
+                  isActive
+                    ? 'rounded-full border border-blue-900 bg-blue-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60'
+                    : 'rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-900 disabled:cursor-not-allowed disabled:opacity-60'
+                }
+              >
+                {opcion.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
@@ -450,12 +538,18 @@ export default function CandidatesSection({
                   No hay candidatos registrados en este proceso electoral.
                 </td>
               </tr>
+            ) : filteredCandidates.length === 0 ? (
+              <tr>
+                <td className="px-4 py-3 text-sm text-slate-700" colSpan={6}>
+                  No hay candidatos registrados en este ámbito por el momento.
+                </td>
+              </tr>
             ) : (
-              candidates.map((candidate) => {
+              filteredCandidates.map((candidate) => {
                 const coalition = candidate?.frente?.id ? coalitionById.get(candidate.frente.id) : null
                 const coalitionName = coalition?.nombreFrente || candidate?.frente?.nombreFrente || '—'
                 const fullName = `${candidate.nombres} ${candidate.apellidos}`.trim()
-                const papeleta = candidate?.eleccionCargo ?? papeletaById.get(candidate?.eleccionCargo?.id) ?? null
+                const papeleta = resolveCandidatePapeleta(candidate, papeletaById)
                 const cargoLabel = candidate.rolEspecifico?.trim() || 'Sin rol asignado'
                 const ambitoLabel = formatAmbito(papeleta)
 

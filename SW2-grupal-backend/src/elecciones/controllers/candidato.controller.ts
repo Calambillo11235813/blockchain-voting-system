@@ -1,13 +1,15 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { CandidatoService } from 'src/elecciones/services/candidato.service';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { Candidato } from 'src/elecciones/entities/candidato.entity';
 import { CrearCandidatoDto } from 'src/elecciones/dto/candidato/crear-candidato.dto';
 import { ActualizarCandidatoDto } from 'src/elecciones/dto/candidato/actualizar-candidato.dto';
-import { CrearVotoBlockchainDto } from 'src/elecciones/dto/voto/crear-voto-blockchain.dto';
 import { VotoService } from 'src/elecciones/services/voto.service';
 import { EmitirVotoDto } from 'src/elecciones/dto/voto/emitir-voto.dto';
-import { VotoComprobante } from 'src/elecciones/services/voto.service';
+import { EmitirVotoBatchDto } from 'src/elecciones/dto/voto/emitir-voto-batch.dto';
+import { VotoComprobante, VotoBatchComprobante } from 'src/elecciones/services/voto.service';
+import { JwtAuthGuard } from 'src/autenticacion/guards/jwt-auth.guard';
+import { Elector } from 'src/electores/entities/elector.entity';
 
 
 /**
@@ -98,6 +100,23 @@ export class CandidatoController {
       emitirVotoDto.eleccionId,
       emitirVotoDto.eleccionCargoId,
       emitirVotoDto.candidatoId,
+    );
+  }
+
+  /**
+   * CU-12/13/14 (Crucero): Registra un lote de votos en una sola transacción blockchain.
+   * Requiere JWT; el electorId y estamento se infieren de la sesión autenticada.
+   */
+  @Post('votar-batch')
+  @UseGuards(JwtAuthGuard)
+  async emitirVotoBatch(
+    @Body() emitirVotoBatchDto: EmitirVotoBatchDto,
+    @Req() req: { user: Elector },
+  ): Promise<ApiResponse<VotoBatchComprobante>> {
+    return this.votoService.votarBatch(
+      req.user,
+      emitirVotoBatchDto.eleccionId,
+      emitirVotoBatchDto.selecciones,
     );
   }
 }

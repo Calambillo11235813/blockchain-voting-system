@@ -11,7 +11,7 @@ export class PapeletaController {
   /**
    * Obtiene la papeleta completa jerárquica de una elección.
    * @param eleccionId Identificador UUID de la eleccion.
-   * @param registro Registro universitario opcional para filtrar cargos según elegibilidad (ej. Rector).
+   * @param registro Registro universitario del elector; filtra cargos por alcance (GLOBAL, FACULTAD, CARRERA).
    * @returns Papeleta digital anidada.
    */
   @Get(':eleccionId/papeleta')

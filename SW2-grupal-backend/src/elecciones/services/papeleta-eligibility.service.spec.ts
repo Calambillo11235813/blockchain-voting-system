@@ -103,6 +103,55 @@ describe('PapeletaEligibilityService', () => {
     expect(service.esPapeletaAplicable(otraCarrera, papeleta, padronHabilitado)).toBe(false);
   });
 
+  it('excluye papeletas de otra facultad y deja solo GLOBAL para estudiante de Economía', () => {
+    const global = crearPapeleta({ alcance: AlcancePapeletaEnum.GLOBAL });
+    const decanoCs = crearPapeleta({
+      id: 'ec-fac',
+      alcance: AlcancePapeletaEnum.FACULTAD,
+      codFacultad: '15',
+      facultadNombre: 'Ciencias de la Computación y Sistemas',
+      cargo: {
+        id: 'c2',
+        nombre: 'Decano',
+        facultad: '',
+        tipoCargo: TipoCargoEnum.DECANO,
+        eleccionCargos: [],
+      },
+    });
+    const directorCs = crearPapeleta({
+      id: 'ec-car',
+      alcance: AlcancePapeletaEnum.CARRERA,
+      codFacultad: '15',
+      codCarrera: '157-1',
+      facultadNombre: 'Ciencias de la Computación y Sistemas',
+      carreraNombre: 'Ingeniería de Sistemas',
+      cargo: {
+        id: 'c3',
+        nombre: 'Director de Carrera',
+        facultad: '',
+        tipoCargo: TipoCargoEnum.DIRECTOR_CARRERA,
+        eleccionCargos: [],
+      },
+    });
+
+    const estudianteEconomia: Elector = {
+      ...baseElector,
+      facultad: 'Economía',
+      codFacultad: '08',
+      carrera: 'Economía',
+      codCarrera: '081-1',
+    };
+
+    const aplicables = service.filtrarPapeletasAplicables(
+      estudianteEconomia,
+      [global, decanoCs, directorCs],
+      padronHabilitado,
+    );
+
+    expect(aplicables).toHaveLength(1);
+    expect(aplicables[0].alcance).toBe(AlcancePapeletaEnum.GLOBAL);
+  });
+
   it('incluye docentes de la facultad en papeleta CARRERA aunque no tengan codCarrera', () => {
     const papeleta = crearPapeleta({
       alcance: AlcancePapeletaEnum.CARRERA,

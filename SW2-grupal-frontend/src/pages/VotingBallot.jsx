@@ -1,28 +1,30 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchBallotComplete, fetchElections } from '../services/electionsService'
-import { emitirVoto } from '../services/votoService'
+import { emitirVotoBatch } from '../services/votoService'
 import { verificarEstadoVoto, descargarCertificado } from '../services/certificadoService'
 import { getEstadisticasEstudiantes, getEstadisticasDocentes } from '../services/estadisticasService'
 import { useAuth } from '../context/AuthContext'
 import { decodeJwtPayload } from '../utils/jwt'
+import { buildBallotPreviews } from './admin/electoral/ballotPreviewUtils'
+import BallotStep from './estudiante/components/BallotStep'
+import VotingSummary from './estudiante/components/VotingSummary'
+
+const SUMMARY_STEP = { key: 'SUMMARY', type: 'SUMMARY', label: 'Resumen de Sufragio' }
 
 /**
- * Pantalla de papeleta de votación para el estudiante (HU-003).
- *
- * Carga automáticamente la elección activa y muestra los frentes/candidatos.
- * El estudiante selecciona un frente y confirma su voto.
+ * Pantalla de papeleta de votación con wizard dinámico según papeletas elegibles.
  */
 export default function VotingBallot() {
   const [ballot, setBallot] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [selectedFrenteKey, setSelectedFrenteKey] = useState(null)
-  const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [electionLabel, setElectionLabel] = useState('')
   const [activeElectionId, setActiveElectionId] = useState(null)
-  
+  const [currentStepIndex, setCurrentStepIndex] = useState(0)
+  const [selectionsByBallot, setSelectionsByBallot] = useState({})
+
   const [haVotado, setHaVotado] = useState(false)
   const [txHash, setTxHash] = useState(null)
   const [estadisticas, setEstadisticas] = useState(null)
@@ -31,12 +33,59 @@ export default function VotingBallot() {
   const { token, role, logout } = useAuth()
   const navigate = useNavigate()
 
+  const orderedBallots = useMemo(() => buildBallotPreviews(ballot), [ballot])
+
+  const wizardSteps = useMemo(() => {
+    const ballotSteps = orderedBallots.map((ballotItem) => ({
+      key: ballotItem.id,
+      type: 'BALLOT',
+      label: ballotItem.title || ballotItem.alcanceLabel,
+      ballot: ballotItem,
+    }))
+
+    return [...ballotSteps, SUMMARY_STEP]
+  }, [orderedBallots])
+
+  const currentStep = wizardSteps[currentStepIndex] || null
+  const isSummaryStep = currentStep?.type === 'SUMMARY'
+  const totalSteps = wizardSteps.length
+
+  const currentBallotStep = isSummaryStep ? null : currentStep?.ballot || null
+
+  const currentSelection = currentBallotStep
+    ? selectionsByBallot[currentBallotStep.id] || null
+    : null
+
+  const summaryItems = useMemo(() => (
+    orderedBallots.map((ballotItem) => ({
+      stepLabel: ballotItem.title || ballotItem.alcanceLabel,
+      ballotId: ballotItem.id,
+      selection: selectionsByBallot[ballotItem.id] || null,
+    }))
+  ), [orderedBallots, selectionsByBallot])
+
+  const canGoNext = useMemo(() => {
+    if (isSummaryStep) return false
+    if (!currentBallotStep) return false
+    return Boolean(selectionsByBallot[currentBallotStep.id])
+  }, [currentBallotStep, isSummaryStep, selectionsByBallot])
+
   function handleLogout() {
     logout()
     navigate('/login', { replace: true })
   }
 
-  // Carga la elección activa y su papeleta automáticamente
+  useEffect(() => {
+    setCurrentStepIndex(0)
+    setSelectionsByBallot({})
+  }, [ballot?.id])
+
+  useEffect(() => {
+    if (currentStepIndex >= wizardSteps.length && wizardSteps.length > 0) {
+      setCurrentStepIndex(wizardSteps.length - 1)
+    }
+  }, [currentStepIndex, wizardSteps.length])
+
   useEffect(() => {
     let isMounted = true
 
@@ -55,7 +104,7 @@ export default function VotingBallot() {
 
         setElectionLabel(`${active.titulo} (${active.gestion})`)
         setActiveElectionId(active.id)
-        
+
         const estadoVoto = await verificarEstadoVoto(active.id)
         if (estadoVoto.haVotado) {
           if (isMounted) {
@@ -72,6 +121,14 @@ export default function VotingBallot() {
         } else {
           const payload = decodeJwtPayload(token)
           const registro = typeof payload?.registro === 'string' ? payload.registro : undefined
+
+          if (!registro) {
+            if (isMounted) {
+              setErrorMessage('No se pudo identificar su registro universitario. Vuelva a iniciar sesión.')
+            }
+            return
+          }
+
           const data = await fetchBallotComplete(active.id, registro)
           if (isMounted) setBallot(data)
         }
@@ -86,112 +143,66 @@ export default function VotingBallot() {
     return () => { isMounted = false }
   }, [token, role])
 
-  // Construye columnas de frentes — idéntica lógica que BallotConfiguration del admin
-  const ballotColumns = useMemo(() => {
-    if (!ballot?.cargos?.length) return []
+  function handleSelectOption(selection) {
+    if (!selection?.eleccionCargoId) return
 
-    const cargoOrder = ballot.cargos.map((cargo) => ({
-      id: cargo.id,
-      nombre: cargo.nombre,
-      facultad: cargo.facultad,
+    setSelectionsByBallot((prev) => ({
+      ...prev,
+      [selection.eleccionCargoId]: selection,
     }))
-
-    const groupMap = new Map()
-
-    for (const cargo of ballot.cargos) {
-      for (const frente of cargo.frentes || []) {
-        const siglaKey = String(frente.sigla || '').trim().toUpperCase()
-        const nameKey = String(frente.nombreFrente || '').trim().toLowerCase()
-        const groupKey = `${siglaKey}|${nameKey}`
-
-        const existing = groupMap.get(groupKey)
-        const group = existing || {
-          key: groupKey,
-          nombreFrente: String(frente.nombreFrente || '').trim(),
-          sigla: siglaKey,
-          logoUrl: frente.logoUrl || '',
-          cargos: new Map(),
-        }
-
-        group.cargos.set(cargo.id, {
-          cargoId: cargo.id,
-          cargoNombre: cargo.nombre,
-          facultad: cargo.facultad,
-          candidatos: frente.candidatos || [],
-        })
-
-        if (!group.logoUrl && frente.logoUrl) {
-          group.logoUrl = frente.logoUrl
-        }
-
-        if (!existing) groupMap.set(groupKey, group)
-      }
-    }
-
-    return Array.from(groupMap.values())
-      .map((group) => ({ ...group, cargoOrder }))
-      .sort((a, b) => {
-        const aSigla = a.sigla || ''
-        const bSigla = b.sigla || ''
-        if (aSigla !== bSigla) return aSigla.localeCompare(bSigla)
-        return String(a.nombreFrente || '').localeCompare(String(b.nombreFrente || ''))
-      })
-  }, [ballot])
-
-  const selectedFrente = useMemo(
-    () => ballotColumns.find((c) => c.key === selectedFrenteKey) || null,
-    [ballotColumns, selectedFrenteKey]
-  )
-
-  function handleSelectFrente(key) {
-    setSelectedFrenteKey((prev) => (prev === key ? null : key))
   }
 
-  async function handleVoteSubmit() {
-    if (!selectedFrenteKey || !activeElectionId) return
+  function handlePreviousStep() {
+    setErrorMessage('')
+    setCurrentStepIndex((prev) => Math.max(prev - 1, 0))
+  }
+
+  function handleNextStep() {
+    if (!canGoNext) return
+    setErrorMessage('')
+    setCurrentStepIndex((prev) => Math.min(prev + 1, wizardSteps.length - 1))
+  }
+
+  async function loadPostVoteStats(eleccionId) {
+    const statsMethod = role === 'DOCENTE' ? getEstadisticasDocentes : getEstadisticasEstudiantes
+    try {
+      const statsData = await statsMethod(eleccionId)
+      setEstadisticas(statsData)
+    } catch (err) {
+      console.error('Error cargando estadísticas', err)
+    }
+  }
+
+  async function handleBatchSubmit() {
+    if (!activeElectionId) return
+
+    const pending = summaryItems.filter((item) => !item.selection)
+    if (pending.length > 0) {
+      setErrorMessage('Debe completar todas las papeletas antes de emitir su voto.')
+      return
+    }
+
+    const selecciones = summaryItems.map((item) => ({
+      eleccionCargoId: item.selection.eleccionCargoId,
+      candidatoId: item.selection.candidatoId,
+    }))
 
     try {
       setIsSubmitting(true)
-      
-      const payload = decodeJwtPayload(token)
-      const electorId = payload?.sub
+      setErrorMessage('')
 
-      if (!electorId) {
-        throw new Error('No se pudo identificar al elector. Por favor, inicie sesión nuevamente.')
-      }
+      const result = await emitirVotoBatch({
+        eleccionId: activeElectionId,
+        selecciones,
+      })
 
-      // Obtener el candidato elegido del frente seleccionado. 
-      // Si la papeleta tiene varios cargos, en este prototipo asumimos que 
-      // votamos "en plancha" por el candidato principal (ej. Rector) 
-      // o que el backend espera el candidato. Asumiremos el primer candidato del frente.
-      const cargoPrincipalId = selectedFrente.cargoOrder[0]?.id
-      const cargoData = selectedFrente.cargos.get(cargoPrincipalId)
-      const candidatoId = cargoData?.candidatos?.[0]?.id
-
-      if (!candidatoId) {
-         throw new Error('No se encontró un candidato válido para este frente.')
-      }
-
-      const result = await emitirVoto(activeElectionId, electorId, candidatoId)
-      
-      setShowConfirmModal(false)
-      // Mostrar el dashboard post-votación con estadísticas en el mismo componente
       setHaVotado(true)
       setTxHash(result?.hashTransaccion || result?.txHash)
-
-      // Cargar estadísticas en vivo
-      const statsMethod = role === 'DOCENTE' ? getEstadisticasDocentes : getEstadisticasEstudiantes
-      try {
-        const statsData = await statsMethod(activeElectionId)
-        setEstadisticas(statsData)
-      } catch (err) {
-        console.error('Error cargando estadísticas', err)
-      }
+      await loadPostVoteStats(activeElectionId)
     } catch (error) {
       console.error(error)
       const errorMsg = error?.response?.data?.message || error?.message || 'Error al emitir el voto.'
       setErrorMessage(errorMsg)
-      setShowConfirmModal(false)
     } finally {
       setIsSubmitting(false)
     }
@@ -210,21 +221,22 @@ export default function VotingBallot() {
     }
   }
 
-  // ─── Pantalla principal ────────────────────────────────────────────────────
+  const wizardSubtitle = totalSteps > 1
+    ? `Complete los ${totalSteps} pasos para emitir su sufragio.`
+    : 'Complete el paso para emitir su sufragio.'
+
   return (
     <main className="min-h-screen bg-white">
-      {/* Header institucional — igual estilo que el admin */}
       <header className="bg-blue-900">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h1 className="text-lg font-semibold text-white">Papeleta de Votación</h1>
+              <h1 className="text-lg font-semibold text-white">Crucero de Votación</h1>
               <p className="mt-1 text-sm text-white/90">
-                {electionLabel || 'Seleccione su frente/candidato y confirme su voto.'}
+                {electionLabel || wizardSubtitle}
               </p>
             </div>
 
-            {/* Botón Confirmar voto o Cerrar sesión */}
             {haVotado ? (
               <button
                 id="btn-cerrar-sesion"
@@ -236,25 +248,40 @@ export default function VotingBallot() {
                 </svg>
                 Cerrar sesión
               </button>
-            ) : selectedFrenteKey ? (
-              <button
-                id="btn-confirmar-voto"
-                onClick={() => setShowConfirmModal(true)}
-                className="flex shrink-0 items-center gap-2 rounded-lg bg-yellow-500 px-5 py-2.5 text-sm font-bold text-white shadow hover:bg-yellow-400 active:scale-95 transition-all"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Confirmar voto
-              </button>
+            ) : totalSteps > 0 ? (
+              <div className="rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white">
+                Paso {currentStepIndex + 1} / {totalSteps}
+              </div>
             ) : null}
           </div>
+
+          {!haVotado && wizardSteps.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {wizardSteps.map((step, index) => {
+                const isActive = index === currentStepIndex
+                const isCompleted = index < currentStepIndex
+
+                return (
+                  <span
+                    key={step.key}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      isActive
+                        ? 'bg-yellow-500 text-blue-900'
+                        : isCompleted
+                          ? 'bg-white/20 text-white'
+                          : 'bg-white/10 text-white/70'
+                    }`}
+                  >
+                    {index + 1}. {step.label}
+                  </span>
+                )
+              })}
+            </div>
+          )}
         </div>
       </header>
 
       <div className="mx-auto max-w-6xl px-4 py-8">
-
-        {/* Estado: cargando */}
         {isLoading && (
           <div className="flex items-center justify-center py-20">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-900" />
@@ -262,14 +289,12 @@ export default function VotingBallot() {
           </div>
         )}
 
-        {/* Estado: error */}
         {!isLoading && errorMessage && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {errorMessage}
           </div>
         )}
 
-        {/* ── Dashboard Post-Votación ── */}
         {!isLoading && haVotado && (
           <div className="mx-auto max-w-2xl space-y-6">
             <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -282,7 +307,7 @@ export default function VotingBallot() {
               <p className="mt-2 text-slate-600">
                 Ya has participado en esta elección. Puedes descargar tu certificado oficial a continuación.
               </p>
-              
+
               <button
                 onClick={handleDownloadCertificate}
                 disabled={isDownloading}
@@ -319,7 +344,7 @@ export default function VotingBallot() {
                     <p className="mt-1 text-2xl font-black text-green-600">{estadisticas.totalVotosEmitidos}</p>
                   </div>
                 </div>
-                
+
                 <div className="mt-6">
                   <div className="flex flex-col items-center">
                     <p className="mb-4 text-sm font-semibold text-slate-700">Participación del Estamento</p>
@@ -332,20 +357,16 @@ export default function VotingBallot() {
                       return (
                         <div className="relative inline-flex items-center justify-center">
                           <svg width="140" height="140" viewBox="0 0 140 140" className="-rotate-90">
-                            {/* Fondo del donut */}
+                            <circle cx="70" cy="70" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="12" />
                             <circle
-                              cx="70" cy="70" r={radius}
-                              fill="none" stroke="#e2e8f0" strokeWidth="12"
-                            />
-                            {/* Arco de participación */}
-                            <circle
-                              cx="70" cy="70" r={radius}
-                              fill="none" stroke="url(#donutGradient)" strokeWidth="12"
+                              cx="70"
+                              cy="70"
+                              r={radius}
+                              fill="none"
+                              stroke="url(#donutGradient)"
+                              strokeWidth="12"
                               strokeLinecap="round"
                               strokeDasharray={`${filled} ${remaining}`}
-                              style={{
-                                transition: 'stroke-dasharray 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                              }}
                             />
                             <defs>
                               <linearGradient id="donutGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -354,7 +375,6 @@ export default function VotingBallot() {
                               </linearGradient>
                             </defs>
                           </svg>
-                          {/* Porcentaje centrado */}
                           <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <span className="text-2xl font-black text-blue-900">{pct}%</span>
                             <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">participación</span>
@@ -362,37 +382,39 @@ export default function VotingBallot() {
                         </div>
                       )
                     })()}
-                    {/* Leyenda debajo del donut */}
+
                     <div className="mt-4 flex items-center gap-5 text-xs">
                       <div className="flex items-center gap-1.5">
                         <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
-                        <span className="text-slate-600">Votaron: <strong className="text-slate-900">{estadisticas.totalVotosEmitidos}</strong></span>
+                        <span className="text-slate-600">
+                          Votaron: <strong className="text-slate-900">{estadisticas.totalVotosEmitidos}</strong>
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-200" />
-                        <span className="text-slate-600">Pendientes: <strong className="text-slate-900">{estadisticas.totalHabilitados - estadisticas.totalVotosEmitidos}</strong></span>
+                        <span className="text-slate-600">
+                          Pendientes: <strong className="text-slate-900">{estadisticas.totalHabilitados - estadisticas.totalVotosEmitidos}</strong>
+                        </span>
                       </div>
                     </div>
                   </div>
-                  
+
                   {txHash && (
-                    <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-5 relative group mt-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                    <div className="relative mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-5 group">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Comprobante de Sufragio (Blockchain)
                       </p>
-                      <div className="flex flex-col sm:flex-row items-center gap-3 pr-10">
-                        <div className="flex-1 w-full bg-white rounded border border-slate-200 p-2 overflow-hidden relative">
-                          <code className="text-xs sm:text-sm font-mono text-blue-900 break-all block">
+                      <div className="flex flex-col items-center gap-3 pr-10 sm:flex-row">
+                        <div className="relative w-full flex-1 overflow-hidden rounded border border-slate-200 bg-white p-2">
+                          <code className="block break-all text-xs font-mono text-blue-900 sm:text-sm">
                             {txHash}
                           </code>
                         </div>
                       </div>
                       <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(txHash)
-                        }}
+                        onClick={() => navigator.clipboard.writeText(txHash)}
                         title="Copiar Hash"
-                        className="absolute right-4 top-1/2 -translate-y-1/2 mt-3 flex items-center justify-center p-2 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                        className="absolute right-4 top-1/2 mt-3 flex -translate-y-1/2 items-center justify-center rounded-lg bg-blue-100 p-2 text-blue-700 transition-colors hover:bg-blue-200"
                       >
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -406,245 +428,61 @@ export default function VotingBallot() {
           </div>
         )}
 
-        {/* Estado: sin datos */}
-        {!isLoading && !errorMessage && !haVotado && ballot && !ballotColumns.length && (
+        {!isLoading && !haVotado && orderedBallots.length === 0 && !errorMessage && (
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm text-slate-700">La papeleta aún no tiene frentes registrados.</p>
+            <p className="text-sm text-slate-700">
+              No tiene papeletas habilitadas para su perfil en esta elección.
+            </p>
           </div>
         )}
 
-        {/* ── Papeleta ── */}
-        {!isLoading && !errorMessage && !haVotado && ballotColumns.length > 0 && (
+        {!isLoading && !haVotado && orderedBallots.length > 0 && (
           <>
-            {/* Instrucción */}
-            <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900">Instrucción</p>
-              <p className="mt-1 text-sm text-slate-700">
-                Haga clic en el frente de su preferencia para seleccionarlo y luego confirme su voto.
-              </p>
-            </div>
+            {isSummaryStep ? (
+              <VotingSummary
+                electionLabel={electionLabel}
+                summaryItems={summaryItems}
+                stepNumber={currentStepIndex + 1}
+                totalSteps={totalSteps}
+                isSubmitting={isSubmitting}
+                onBack={handlePreviousStep}
+                onSubmit={handleBatchSubmit}
+              />
+            ) : (
+              <>
+                <BallotStep
+                  ballot={currentBallotStep}
+                  stepLabel={currentStep?.label}
+                  stepNumber={currentStepIndex + 1}
+                  totalSteps={totalSteps}
+                  selectedOptionKey={currentSelection?.optionKey || null}
+                  onSelect={handleSelectOption}
+                />
 
-            {/* Grid de columnas — mismo layout que BallotConfiguration */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {ballotColumns.map((column) => {
-                const isSelected = selectedFrenteKey === column.key
-
-                return (
+                <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
                   <button
-                    key={column.key}
-                    id={`frente-${column.sigla}`}
                     type="button"
-                    onClick={() => handleSelectFrente(column.key)}
-                    className={`
-                      group relative w-full rounded-xl border-2 text-left transition-all duration-150
-                      focus:outline-none
-                      ${isSelected
-                        ? 'border-yellow-400 shadow-lg shadow-yellow-200/60 ring-2 ring-yellow-300'
-                        : 'border-slate-200 bg-white shadow-sm hover:border-blue-300 hover:shadow-md'
-                      }
-                    `}
+                    onClick={handlePreviousStep}
+                    disabled={currentStepIndex === 0}
+                    className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {/* Badge de selección */}
-                    {isSelected && (
-                      <span className="absolute -right-2 -top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-yellow-500 shadow">
-                        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      </span>
-                    )}
-
-                    {/* Cabecera del frente — logo + nombre + sigla */}
-                    <div className="flex flex-col items-center gap-3 p-4 text-center">
-                      {/* Logo cuadrado grande — mismo tamaño que admin (h-28 w-28) */}
-                      <div className={`h-28 w-28 overflow-hidden rounded-2xl border ${isSelected ? 'border-yellow-300' : 'border-slate-200'} bg-slate-50`}>
-                        {column.logoUrl ? (
-                          <img
-                            src={column.logoUrl}
-                            alt={`Logo ${column.nombreFrente}`}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center">
-                            <span className="text-3xl font-black text-slate-300">
-                              {column.sigla?.charAt(0) || '?'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="w-full">
-                        <p className="break-words text-sm font-semibold text-slate-900">
-                          {column.nombreFrente || 'Frente'}
-                        </p>
-                        <p className="mt-0.5 text-xs text-slate-500">Sigla: {column.sigla || '—'}</p>
-                      </div>
-                    </div>
-
-                    {/* Separador */}
-                    <div className={`mx-4 border-t ${isSelected ? 'border-yellow-200' : 'border-slate-100'}`} />
-
-                    {/* Cargos y candidatos */}
-                    <div className="space-y-4 p-4">
-                      {column.cargoOrder.map((cargo) => {
-                        const cargoData = column.cargos.get(cargo.id)
-                        const candidates = cargoData?.candidatos || []
-
-                        return (
-                          <div key={cargo.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                            {/* Encabezado del cargo */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold uppercase tracking-wide text-slate-700">
-                                  {cargo.nombre}
-                                </p>
-                                {cargo.facultad && (
-                                  <p className="truncate text-xs text-blue-900 font-medium">{cargo.facultad}</p>
-                                )}
-                              </div>
-                              <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
-                                {candidates.length || 0}
-                              </span>
-                            </div>
-
-                            {/* Candidatos — foto grande vertical igual que admin */}
-                            {candidates.length ? (
-                              <div className="mt-3 space-y-2">
-                                {candidates.map((candidate) => (
-                                  <div
-                                    key={candidate.id}
-                                    className="flex flex-col items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-center"
-                                  >
-                                    {/* Foto candidato GRANDE — igual h-50 w-50 que admin */}
-                                    {candidate.fotoUrl ? (
-                                      <img
-                                        src={candidate.fotoUrl}
-                                        alt={`Foto de ${candidate.nombres}`}
-                                        className="h-50 w-50 shrink-0 rounded-2xl border border-slate-200 object-cover"
-                                      />
-                                    ) : (
-                                      <div className="h-50 w-50 shrink-0 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center">
-                                        <span className="text-2xl font-black text-slate-300">
-                                          {candidate.nombres?.charAt(0) || '?'}
-                                        </span>
-                                      </div>
-                                    )}
-                                    <div className="w-full min-w-0">
-                                      <p className="truncate text-base font-semibold text-slate-900">
-                                        {candidate.nombres}
-                                      </p>
-                                      {candidate.apellidos && (
-                                        <p className="truncate text-xs text-slate-500">{candidate.apellidos}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="mt-2 text-sm text-slate-500">Sin candidato registrado.</p>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {/* Footer: seleccionado o invitación a elegir */}
-                    <div className={`rounded-b-xl px-4 py-3 text-center text-xs font-semibold transition-colors
-                      ${isSelected ? 'bg-yellow-500 text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-900'}`}>
-                      {isSelected ? '✓ Seleccionado' : 'Seleccionar este frente'}
-                    </div>
+                    Anterior
                   </button>
-                )
-              })}
-            </div>
 
-            {/* Botón inferior de confirmación */}
-            {selectedFrenteKey && (
-              <div className="mt-8 flex justify-center">
-                <button
-                  onClick={() => setShowConfirmModal(true)}
-                  className="rounded-xl bg-yellow-500 px-10 py-3 text-base font-bold text-white shadow-lg hover:bg-yellow-400 active:scale-95 transition-all"
-                >
-                  Confirmar voto por {selectedFrente?.sigla}
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    disabled={!canGoNext}
+                    className="rounded-xl bg-blue-900 px-6 py-3 text-sm font-bold text-white shadow hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </>
             )}
           </>
         )}
       </div>
-
-      {/* ── Modal de Confirmación ── */}
-      {showConfirmModal && selectedFrente && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            {/* Ícono */}
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100">
-              <svg className="h-8 w-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-              </svg>
-            </div>
-
-            <h2 className="text-center text-xl font-bold text-blue-900">¿Confirmar su voto?</h2>
-            <p className="mt-2 text-center text-sm text-slate-600">
-              Esta acción es <strong>irreversible</strong>. Una vez confirmado, su voto quedará
-              registrado y no podrá modificarse.
-            </p>
-
-            {/* Frente elegido */}
-            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                  {selectedFrente.logoUrl ? (
-                    <img src={selectedFrente.logoUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <span className="text-xl font-black text-slate-400">{selectedFrente.sigla?.charAt(0)}</span>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">Frente seleccionado</p>
-                  <p className="text-base font-bold text-blue-900">{selectedFrente.nombreFrente}</p>
-                  <span className="inline-block rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-900">
-                    {selectedFrente.sigla}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Botones */}
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                id="btn-cancelar-voto"
-                onClick={() => setShowConfirmModal(false)}
-                disabled={isSubmitting}
-                className="rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                id="btn-emitir-voto"
-                onClick={handleVoteSubmit}
-                disabled={isSubmitting}
-                className="flex items-center justify-center gap-2 rounded-xl bg-yellow-500 py-3 text-sm font-bold text-white shadow hover:bg-yellow-400 transition-colors disabled:opacity-70"
-              >
-                {isSubmitting ? (
-                  <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                    Registrando…
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Sí, confirmar voto
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   )
 }
