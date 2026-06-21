@@ -87,3 +87,13 @@ export async function getEstadisticasDocentes(eleccionId) {
   return response?.data?.data || response?.data
 }
 
+/**
+ * Obtiene estadísticas jerárquicas agrupadas por papeleta (Global, Facultad, Carrera).
+ * @param {string} eleccionId UUID de la elección.
+ * @returns {Promise<any>}
+ */
+export async function getEstadisticasJerarquicas(eleccionId) {
+  const response = await api.get(`/estadisticas/jerarquicas/${eleccionId}`)
+  return response?.data?.data || response?.data
+}
+

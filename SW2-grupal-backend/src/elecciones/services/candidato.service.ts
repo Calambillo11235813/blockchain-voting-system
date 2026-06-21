@@ -13,6 +13,7 @@ import { ActualizarCandidatoDto } from 'src/elecciones/dto/candidato/actualizar-
 import { Frente } from 'src/elecciones/entities/frente.entity';
 import { EleccionCargo } from 'src/elecciones/entities/eleccion-cargo.entity';
 import { esRolValidoParaAlcance } from 'src/elecciones/enums/rol-candidato.constants';
+import { EleccionEstadoService } from './eleccion-estado.service';
 
 export interface DatosCandidatoTransaccion {
   ci: string;
@@ -66,6 +67,7 @@ export class CandidatoService {
     private readonly frenteRepository: Repository<Frente>,
     @InjectRepository(EleccionCargo)
     private readonly eleccionCargoRepository: Repository<EleccionCargo>,
+    private readonly eleccionEstadoService: EleccionEstadoService,
   ) {}
 
   async crearCandidato(crearCandidatoDto: CrearCandidatoDto): Promise<ApiResponse<Candidato>> {
@@ -76,6 +78,7 @@ export class CandidatoService {
 
     validarCoherenciaFrentePapeleta(frente, eleccionCargo);
     validarRolEspecificoParaPapeleta(eleccionCargo, crearCandidatoDto.rolEspecifico);
+    await this.eleccionEstadoService.assertEnConfiguracion(eleccionCargo.eleccion.id);
 
     const candidato = this.candidatoRepository.create({
       ci: crearCandidatoDto.ci,
@@ -166,6 +169,7 @@ export class CandidatoService {
 
     const { frente, eleccionCargo } = await this.resolverFrenteYPapeleta(frenteId, eleccionCargoId);
     validarCoherenciaFrentePapeleta(frente, eleccionCargo);
+    await this.eleccionEstadoService.assertEnConfiguracion(eleccionCargo.eleccion.id);
 
     const rolEspecifico =
       actualizarCandidatoDto.rolEspecifico ?? candidato.rolEspecifico ?? '';
@@ -185,6 +189,7 @@ export class CandidatoService {
 
   async eliminarCandidato(candidatoId: string): Promise<ApiResponse<null>> {
     const candidato = await this.buscarCandidatoPorIdOrThrow(candidatoId);
+    await this.eleccionEstadoService.assertEnConfiguracion(candidato.eleccionCargo.eleccion.id);
     await this.candidatoRepository.remove(candidato);
     return createApiResponse(HttpStatus.OK, null, 'Candidato eliminado correctamente.');
   }

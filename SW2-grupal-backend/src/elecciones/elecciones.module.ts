@@ -14,6 +14,7 @@ import { ParametroSistema } from './entities/parametro-sistema.entity';
 
 // ─── Servicios Legacy (código funcional preservado) ───────────────────────────
 import { EleccionesLegacyService } from './services/elecciones.service';
+import { EleccionEstadoService } from './services/eleccion-estado.service';
 import { CargoService } from './services/cargo.service';
 import { FrenteService } from './services/frente.service';
 import { CandidatoService } from './services/candidato.service';
@@ -70,6 +71,7 @@ import { VotoService } from './services/voto.service';
   providers: [
     // Legacy (preservado)
     EleccionesLegacyService,
+    EleccionEstadoService,
     CargoService,
     FrenteService,
     CandidatoService,

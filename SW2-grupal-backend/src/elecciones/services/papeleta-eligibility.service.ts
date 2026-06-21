@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Elector } from 'src/electores/entities/elector.entity';
+import { Elector, EstamentoEnum } from 'src/electores/entities/elector.entity';
 import { EleccionCargo } from '../entities/eleccion-cargo.entity';
 import { PadronElectoral } from '../entities/padron-electoral.entity';
 import { AlcancePapeletaEnum } from '../enums/alcance-papeleta.enum';
@@ -54,14 +54,40 @@ export class PapeletaEligibilityService {
     }
 
     if (eleccionCargo.alcance === AlcancePapeletaEnum.CARRERA) {
-      const codCarreraElector = this.normalizarCodigo(elector.codCarrera);
       const codCarreraPapeleta = this.normalizarCodigo(eleccionCargo.codCarrera);
 
-      if (!codFacPapeleta || !codCarreraPapeleta || !codFacElector || !codCarreraElector) {
+      if (!codFacPapeleta || !codCarreraPapeleta || !codFacElector) {
         return false;
       }
 
-      return codFacElector === codFacPapeleta && codCarreraElector === codCarreraPapeleta;
+      if (codFacElector !== codFacPapeleta) {
+        return false;
+      }
+
+      // Estudiantes: deben pertenecer a la carrera concreta.
+      if (elector.estamento === EstamentoEnum.ESTUDIANTE) {
+        const codCarreraElector = this.normalizarCodigo(elector.codCarrera);
+        if (!codCarreraElector) {
+          return false;
+        }
+        return codCarreraElector === codCarreraPapeleta;
+      }
+
+      // Docentes transversales: dictan en varias carreras; basta la facultad.
+      if (elector.estamento === EstamentoEnum.DOCENTE) {
+        return true;
+      }
+
+      // Administrativos sin codCarrera: misma regla transversal por facultad.
+      if (elector.estamento === EstamentoEnum.ADMINISTRATIVO) {
+        const codCarreraElector = this.normalizarCodigo(elector.codCarrera);
+        if (!codCarreraElector) {
+          return true;
+        }
+        return codCarreraElector === codCarreraPapeleta;
+      }
+
+      return false;
     }
 
     return false;

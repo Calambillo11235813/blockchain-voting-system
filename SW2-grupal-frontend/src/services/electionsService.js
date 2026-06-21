@@ -17,12 +17,17 @@ import { api } from './api'
  */
 
 /**
+ * @typedef {'EN_CONFIGURACION' | 'SELLADA' | 'ACTIVA' | 'FINALIZADA'} EstadoEleccion
+ */
+
+/**
  * @typedef {{
  *  id: string,
  *  titulo: string,
  *  gestion: number,
  *  fecha: string,
  *  estaActiva: boolean,
+ *  estado?: EstadoEleccion,
  *  restriccionAlfabeticaActiva?: boolean,
  * }} Election
  */
@@ -216,7 +221,7 @@ export async function fetchElections() {
 
 /**
  * Crea una elección.
- * @param {{ titulo: string, gestion: number, fecha: string, estaActiva: boolean, restriccionAlfabeticaActiva?: boolean }} payload
+ * @param {{ titulo: string, gestion: number, fecha: string, restriccionAlfabeticaActiva?: boolean }} payload
  * @returns {Promise<Election>}
  */
 export async function createElection(payload) {
@@ -227,12 +232,42 @@ export async function createElection(payload) {
 /**
  * Actualiza una elección.
  * @param {string} electionId
- * @param {{ titulo?: string, gestion?: number, fecha?: string, estaActiva?: boolean, restriccionAlfabeticaActiva?: boolean }} payload
+ * @param {{ titulo?: string, gestion?: number, fecha?: string, restriccionAlfabeticaActiva?: boolean }} payload
  * @returns {Promise<Election>}
  */
 export async function updateElection(electionId, payload) {
   const response = await api.patch(`/elecciones/${electionId}`, payload)
   return response?.data?.data
+}
+
+/**
+ * Sella una elección: cierre legal de listas antes del despliegue del contrato.
+ * @param {string} electionId
+ * @returns {Promise<Election>}
+ */
+export async function sealElection(electionId) {
+  const response = await api.patch(`/elecciones/${electionId}/sellar`)
+  return response?.data?.data
+}
+
+/**
+ * Abre la jornada electoral (SELLADA → ACTIVA).
+ * @param {string} eleccionId
+ * @returns {Promise<Election>}
+ */
+export async function abrirJornada(eleccionId) {
+  const response = await api.patch(`/elecciones/${eleccionId}/abrir`)
+  return response?.data?.data || response?.data
+}
+
+/**
+ * Cierra la jornada electoral (ACTIVA → FINALIZADA).
+ * @param {string} eleccionId
+ * @returns {Promise<Election>}
+ */
+export async function cerrarJornada(eleccionId) {
+  const response = await api.patch(`/elecciones/${eleccionId}/cerrar`)
+  return response?.data?.data || response?.data
 }
 
 /**

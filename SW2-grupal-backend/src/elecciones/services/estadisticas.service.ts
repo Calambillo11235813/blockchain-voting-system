@@ -3,10 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Eleccion } from '../entities/eleccion.entity';
+import { EleccionCargo } from '../entities/eleccion-cargo.entity';
 import { PadronElectoral } from '../entities/padron-electoral.entity';
 import { RegistroSufragio } from '../entities/registro-sufragio.entity';
 import { EstamentoEnum } from '../../electores/entities/elector.entity';
+import { AlcancePapeletaEnum } from '../enums/alcance-papeleta.enum';
+import { EstadoEleccionEnum } from '../enums/estado-eleccion.enum';
 import { ApiResponse, createApiResponse } from '../../compartido/respuesta';
+import { PapeletaEligibilityService } from './papeleta-eligibility.service';
 
 // ─── Interfaces de resultado ──────────────────────────────────────────────────
 
@@ -31,6 +35,51 @@ export interface EstadisticasParticipacion {
     administrativo: EstadisticasEstamento;
   };
   ultimaActualizacion: string;
+}
+
+/** Serie simple para gráficos de participación por papeleta. */
+export interface EstadisticasSerie {
+  name: string;
+  value: number;
+}
+
+/** Estadísticas de una papeleta (EleccionCargo) dentro del dashboard jerárquico. */
+export interface EstadisticasPapeleta {
+  eleccionCargoId: string;
+  cargoNombre: string;
+  alcance: AlcancePapeletaEnum;
+  orden: number;
+  ambito: {
+    codFacultad: string | null;
+    facultadNombre: string | null;
+    codCarrera: string | null;
+    carreraNombre: string | null;
+  };
+  habilitados: number;
+  votosEmitidos: number;
+  pendientes: number;
+  porcentajeParticipacion: number;
+  porEstamento: {
+    estudiante: EstadisticasEstamento;
+    docente: EstadisticasEstamento;
+    administrativo: EstadisticasEstamento;
+  };
+  series: EstadisticasSerie[];
+}
+
+/** Respuesta jerárquica agrupada por papeleta/alcance. */
+export interface EstadisticasJerarquicas {
+  eleccionId: string;
+  tituloEleccion: string;
+  estado: EstadoEleccionEnum;
+  ultimaActualizacion: string;
+  resumenGeneral: {
+    totalHabilitados: number;
+    totalSufragiosEmitidos: number;
+    totalElectoresParticipantes: number;
+    porcentajeParticipacion: number;
+  };
+  papeletas: EstadisticasPapeleta[];
 }
 
 /** Respuesta de CU-16/CU-17: estadísticas filtradas por un estamento específico. */
@@ -68,6 +117,8 @@ export class EstadisticasService {
 
     @InjectRepository(RegistroSufragio)
     private readonly registroSufragioRepository: Repository<RegistroSufragio>,
+
+    private readonly papeletaEligibilityService: PapeletaEligibilityService,
   ) {}
 
   // ─── Utilidades privadas ──────────────────────────────────────────────────────
@@ -85,6 +136,108 @@ export class EstadisticasService {
       );
     }
     return eleccion;
+  }
+
+  private async findEleccionConCargosOrFail(eleccionId: string): Promise<Eleccion> {
+    const eleccion = await this.eleccionRepository.findOne({
+      where: { id: eleccionId },
+      relations: { eleccionCargos: { cargo: true } },
+    });
+    if (!eleccion) {
+      throw new NotFoundException(
+        `No se encontró la elección con ID "${eleccionId}".`,
+      );
+    }
+    return eleccion;
+  }
+
+  private crearEstamentoVacio(): EstadisticasEstamento {
+    return { habilitados: 0, votos: 0, porcentaje: 0 };
+  }
+
+  private buildEstamentoStats(
+    habMap: Map<string, number>,
+    votosMap: Map<string, number>,
+    key: EstamentoEnum,
+  ): EstadisticasEstamento {
+    const habilitados = habMap.get(key) ?? 0;
+    const votos = votosMap.get(key) ?? 0;
+    return {
+      habilitados,
+      votos,
+      porcentaje: this.calcularPorcentaje(votos, habilitados),
+    };
+  }
+
+  private compararPapeletas(a: EleccionCargo, b: EleccionCargo): number {
+    const ordenAlcance: Record<AlcancePapeletaEnum, number> = {
+      [AlcancePapeletaEnum.GLOBAL]: 0,
+      [AlcancePapeletaEnum.FACULTAD]: 1,
+      [AlcancePapeletaEnum.CARRERA]: 2,
+    };
+
+    const alcanceDiff = ordenAlcance[a.alcance] - ordenAlcance[b.alcance];
+    if (alcanceDiff !== 0) return alcanceDiff;
+
+    if (a.orden !== b.orden) return a.orden - b.orden;
+
+    const facDiff = String(a.facultadNombre ?? '').localeCompare(String(b.facultadNombre ?? ''));
+    if (facDiff !== 0) return facDiff;
+
+    return String(a.carreraNombre ?? '').localeCompare(String(b.carreraNombre ?? ''));
+  }
+
+  private async obtenerVotosPorPapeletaYEstamento(
+    eleccionId: string,
+  ): Promise<Map<string, Map<string, number>>> {
+    const rows: { eleccionCargoId: string; estamento: string; total: string }[] =
+      await this.registroSufragioRepository
+        .createQueryBuilder('rs')
+        .innerJoin('rs.elector', 'elector')
+        .innerJoin('rs.eleccionCargo', 'ec')
+        .where('rs.eleccion = :eleccionId', { eleccionId })
+        .select('ec.id', 'eleccionCargoId')
+        .addSelect('elector.estamento', 'estamento')
+        .addSelect('COUNT(rs.id)', 'total')
+        .groupBy('ec.id')
+        .addGroupBy('elector.estamento')
+        .getRawMany();
+
+    const mapa = new Map<string, Map<string, number>>();
+    for (const row of rows) {
+      if (!mapa.has(row.eleccionCargoId)) {
+        mapa.set(row.eleccionCargoId, new Map<string, number>());
+      }
+      mapa.get(row.eleccionCargoId)!.set(row.estamento, parseInt(row.total, 10));
+    }
+    return mapa;
+  }
+
+  private calcularHabilitadosPorPapeleta(
+    eleccionCargo: EleccionCargo,
+    padronHabilitado: PadronElectoral[],
+  ): Map<string, number> {
+    const mapa = new Map<string, number>();
+
+    for (const entrada of padronHabilitado) {
+      const elector = entrada.elector;
+      if (!elector) continue;
+
+      if (
+        !this.papeletaEligibilityService.esPapeletaAplicable(
+          elector,
+          eleccionCargo,
+          entrada,
+        )
+      ) {
+        continue;
+      }
+
+      const estamento = elector.estamento;
+      mapa.set(estamento, (mapa.get(estamento) ?? 0) + 1);
+    }
+
+    return mapa;
   }
 
   /**
@@ -279,6 +432,102 @@ export class EstadisticasService {
     eleccionId: string,
   ): Promise<ApiResponse<EstadisticasEstamentoDetalle>> {
     return this.obtenerEstadisticasPorEstamento(eleccionId, EstamentoEnum.DOCENTE);
+  }
+
+  /**
+   * Estadísticas jerárquicas agrupadas por papeleta (EleccionCargo).
+   * Incluye contadores en cero cuando la elección está sellada sin votos.
+   */
+  async obtenerEstadisticasJerarquicas(
+    eleccionId: string,
+  ): Promise<ApiResponse<EstadisticasJerarquicas>> {
+    const eleccion = await this.findEleccionConCargosOrFail(eleccionId);
+
+    const cargosOrdenados = [...(eleccion.eleccionCargos ?? [])].sort((a, b) =>
+      this.compararPapeletas(a, b),
+    );
+
+    const [padronHabilitado, votosPorPapeleta, totalElectoresParticipantes, totalSufragios] =
+      await Promise.all([
+        this.padronRepository.find({
+          where: { eleccion: { id: eleccionId }, estaHabilitado: true },
+          relations: { elector: true },
+        }),
+        this.obtenerVotosPorPapeletaYEstamento(eleccionId),
+        this.contarElectoresParticipantes(eleccionId),
+        this.registroSufragioRepository.count({
+          where: { eleccion: { id: eleccionId } },
+        }),
+      ]);
+
+    const papeletas: EstadisticasPapeleta[] = cargosOrdenados.map((cargo) => {
+      const habPorEstamento = this.calcularHabilitadosPorPapeleta(cargo, padronHabilitado);
+      const votosMap = votosPorPapeleta.get(cargo.id) ?? new Map<string, number>();
+
+      let habilitados = 0;
+      let votosEmitidos = 0;
+      for (const v of habPorEstamento.values()) habilitados += v;
+      for (const v of votosMap.values()) votosEmitidos += v;
+
+      const pendientes = Math.max(habilitados - votosEmitidos, 0);
+
+      return {
+        eleccionCargoId: cargo.id,
+        cargoNombre: cargo.cargo?.nombre ?? 'Papeleta',
+        alcance: cargo.alcance,
+        orden: cargo.orden,
+        ambito: {
+          codFacultad: cargo.codFacultad,
+          facultadNombre: cargo.facultadNombre,
+          codCarrera: cargo.codCarrera,
+          carreraNombre: cargo.carreraNombre,
+        },
+        habilitados,
+        votosEmitidos,
+        pendientes,
+        porcentajeParticipacion: this.calcularPorcentaje(votosEmitidos, habilitados),
+        porEstamento: {
+          estudiante: this.buildEstamentoStats(habPorEstamento, votosMap, EstamentoEnum.ESTUDIANTE),
+          docente: this.buildEstamentoStats(habPorEstamento, votosMap, EstamentoEnum.DOCENTE),
+          administrativo: this.buildEstamentoStats(
+            habPorEstamento,
+            votosMap,
+            EstamentoEnum.ADMINISTRATIVO,
+          ),
+        },
+        series: [
+          { name: 'Habilitados', value: habilitados },
+          { name: 'Votos emitidos', value: votosEmitidos },
+          { name: 'Pendientes', value: pendientes },
+        ],
+      };
+    });
+
+    const totalHabilitadosPadron = padronHabilitado.length;
+    const estado = eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION;
+
+    const data: EstadisticasJerarquicas = {
+      eleccionId,
+      tituloEleccion: eleccion.titulo,
+      estado,
+      ultimaActualizacion: new Date().toISOString(),
+      resumenGeneral: {
+        totalHabilitados: totalHabilitadosPadron,
+        totalSufragiosEmitidos: totalSufragios,
+        totalElectoresParticipantes,
+        porcentajeParticipacion: this.calcularPorcentaje(
+          totalElectoresParticipantes,
+          totalHabilitadosPadron,
+        ),
+      },
+      papeletas,
+    };
+
+    return createApiResponse(
+      HttpStatus.OK,
+      data,
+      'Estadísticas jerárquicas obtenidas correctamente.',
+    );
   }
 
   /**

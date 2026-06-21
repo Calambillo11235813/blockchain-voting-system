@@ -7,11 +7,14 @@ import {
   UseGuards,
   Res,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { JwtAuthGuard } from 'src/autenticacion/guards/jwt-auth.guard';
+import { ElectoralGuard } from 'src/administradores/guards/electoral.guard';
 import { EstadisticasService } from '../services/estadisticas.service';
 import { ApiResponse } from 'src/compartido/respuesta';
 import {
   EstadisticasEstamentoDetalle,
+  EstadisticasJerarquicas,
   EstadisticasParticipacion,
 } from '../services/estadisticas.service';
 import { EscrutinioService, ReporteConsolidacion } from '../services/escrutinio.service';
@@ -48,6 +51,7 @@ export class EstadisticasController {
    * @example GET /estadisticas/escrutinio/550e8400-e29b-41d4-a716-446655440000
    */
   @Get('escrutinio/:eleccionId')
+  @UseGuards(AuthGuard('jwt'), ElectoralGuard)
   async generarReporteConsolidacion(
     @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
   ): Promise<ApiResponse<ReporteConsolidacion>> {
@@ -58,6 +62,7 @@ export class EstadisticasController {
    * Descarga el Acta de Consolidación Paritaria en formato PDF.
    */
   @Get('escrutinio/:eleccionId/pdf')
+  @UseGuards(AuthGuard('jwt'), ElectoralGuard)
   async descargarActaPDF(
     @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
     @Res() res: any,
@@ -88,6 +93,18 @@ export class EstadisticasController {
     @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
   ): Promise<ApiResponse<EstadisticasParticipacion>> {
     return this.estadisticasService.obtenerParticipacionGlobal(eleccionId);
+  }
+
+  /**
+   * Estadísticas jerárquicas por papeleta (Global, Facultad, Carrera).
+   *
+   * @example GET /estadisticas/jerarquicas/550e8400-e29b-41d4-a716-446655440000
+   */
+  @Get('jerarquicas/:eleccionId')
+  async obtenerEstadisticasJerarquicas(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<EstadisticasJerarquicas>> {
+    return this.estadisticasService.obtenerEstadisticasJerarquicas(eleccionId);
   }
 
   /**

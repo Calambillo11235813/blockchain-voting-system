@@ -15,7 +15,7 @@ import GestionPadron from '../pages/admin/electoral/GestionPadron'
 import GestionFrentesCandidatos from '../pages/admin/electoral/GestionFrentesCandidatos'
 import ConfiguracionPapeleta from '../pages/admin/electoral/ConfiguracionPapeleta'
 import GestionElecciones from '../pages/admin/electoral/GestionElecciones'
-import ResultadosAuditoria from '../pages/admin/electoral/ResultadosAuditoria'
+import ConsolidacionResultados from '../pages/admin/electoral/ConsolidacionResultados'
 import EstadisticasEnVivo from '../pages/admin/electoral/EstadisticasEnVivo'
 import GestionAdministradores from '../pages/admin/sistemas/GestionAdministradores'
 import ConfiguracionSistema from '../pages/admin/sistemas/ConfiguracionSistema'
@@ -87,12 +87,16 @@ export default function AppRoutes() {
             }
           />
           <Route
-            path="auditoria-resultados"
+            path="consolidacion-resultados"
             element={
               <RoleRoute allowedRoles={['ELECTORAL']}>
-                <ResultadosAuditoria />
+                <ConsolidacionResultados />
               </RoleRoute>
             }
+          />
+          <Route
+            path="auditoria-resultados"
+            element={<Navigate to="/admin/consolidacion-resultados" replace />}
           />
           <Route
             path="estadisticas-vivo"

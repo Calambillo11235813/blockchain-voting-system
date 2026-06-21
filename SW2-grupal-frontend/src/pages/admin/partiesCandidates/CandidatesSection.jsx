@@ -1,17 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   createCandidate,
   deleteCandidate,
   fetchCandidates,
   updateCandidate,
 } from '../../../services/electionsService'
+import { handleMutationApiError } from '../../../utils/apiErrorUtils'
+import { READ_ONLY_ELECTION_HELP } from '../../../utils/electionConstants'
 import {
   formatAmbito,
   formatPapeletaLabel,
   getRolesForPapeleta,
 } from '../../../utils/papeletaConstants'
 import {
+  ActionButton,
   Field,
+  ReadOnlyElectionBanner,
   Th,
   readImageAsDataUrl,
   validateCandidateForm,
@@ -28,10 +32,12 @@ import {
  *  setCandidates: (value: any[]) => void
  *  isLoading: boolean
  *  isBusy: boolean
+ *  isElectionReadOnly: boolean
  *  isCreatingCandidate: boolean
  *  setIsCreatingCandidate: (value: boolean) => void
  *  setErrorMessage: (value: string) => void
  *  setSuccessMessage: (value: string) => void
+ *  setWarningMessage: (value: string) => void
  * }} props
  * @returns {import('react').JSX.Element}
  */
@@ -43,10 +49,12 @@ export default function CandidatesSection({
   setCandidates,
   isLoading,
   isBusy,
+  isElectionReadOnly,
   isCreatingCandidate,
   setIsCreatingCandidate,
   setErrorMessage,
   setSuccessMessage,
+  setWarningMessage,
 }) {
   const [editingCandidateId, setEditingCandidateId] = useState('')
 
@@ -100,6 +108,14 @@ export default function CandidatesSection({
     [selectedPapeleta],
   )
 
+  const formDisabled = isBusy || isElectionReadOnly
+
+  useEffect(() => {
+    if (!isElectionReadOnly) return
+    setEditingCandidateId('')
+    setCandidateForm(resetCandidateForm())
+  }, [isElectionReadOnly])
+
   const handlePapeletaChange = (eleccionCargoId) => {
     const papeleta = papeletaById.get(eleccionCargoId)
     const roles = papeleta ? getRolesForPapeleta(papeleta) : []
@@ -115,6 +131,14 @@ export default function CandidatesSection({
   const handleCreateCandidate = async () => {
     setErrorMessage('')
     setSuccessMessage('')
+    setWarningMessage('')
+
+    if (isElectionReadOnly) {
+      setWarningMessage(
+        '🔒 Acción bloqueada: La elección ya ha sido sellada y no permite modificaciones.',
+      )
+      return
+    }
 
     const validationError = validateCandidateForm(candidateForm)
     if (validationError) {
@@ -148,16 +172,22 @@ export default function CandidatesSection({
       setCandidates(updatedCandidates)
       setEditingCandidateId('')
       setCandidateForm(resetCandidateForm())
-    } catch {
-      setErrorMessage('Hubo un problema al guardar el candidato. Inténtelo más tarde.')
+    } catch (error) {
+      handleMutationApiError(error, {
+        setWarningMessage,
+        setErrorMessage,
+        defaultMessage: 'Hubo un problema al guardar el candidato. Inténtelo más tarde.',
+      })
     } finally {
       setIsCreatingCandidate(false)
     }
   }
 
   const handleEditCandidate = (candidate) => {
+    if (isElectionReadOnly) return
     setErrorMessage('')
     setSuccessMessage('')
+    setWarningMessage('')
 
     setEditingCandidateId(candidate.id)
     setCandidateForm({
@@ -176,6 +206,15 @@ export default function CandidatesSection({
   const handleDeleteCandidate = async (candidateId) => {
     setErrorMessage('')
     setSuccessMessage('')
+    setWarningMessage('')
+
+    if (isElectionReadOnly) {
+      setWarningMessage(
+        '🔒 Acción bloqueada: La elección ya ha sido sellada y no permite modificaciones.',
+      )
+      return
+    }
+
     try {
       await deleteCandidate(candidateId)
       const updatedCandidates = await fetchCandidates(eleccionId)
@@ -186,8 +225,12 @@ export default function CandidatesSection({
         setEditingCandidateId('')
         setCandidateForm(resetCandidateForm())
       }
-    } catch {
-      setErrorMessage('No se pudo eliminar el candidato. Inténtelo más tarde.')
+    } catch (error) {
+      handleMutationApiError(error, {
+        setWarningMessage,
+        setErrorMessage,
+        defaultMessage: 'No se pudo eliminar el candidato. Inténtelo más tarde.',
+      })
     }
   }
 
@@ -236,10 +279,12 @@ export default function CandidatesSection({
             </button>
           ) : null}
 
-          <button
+          <ActionButton
             type="button"
             onClick={handleCreateCandidate}
             disabled={isBusy || coalitions.length === 0 || papeletas.length === 0}
+            readOnly={isElectionReadOnly}
+            readOnlyTitle={READ_ONLY_ELECTION_HELP}
             className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-yellow-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
           >
             {isCreatingCandidate
@@ -247,9 +292,11 @@ export default function CandidatesSection({
               : editingCandidateId
                 ? 'Actualizar candidato'
                 : 'Registrar candidato'}
-          </button>
+          </ActionButton>
         </div>
       </div>
+
+      {isElectionReadOnly ? <ReadOnlyElectionBanner /> : null}
 
       {coalitions.length === 0 ? (
         <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -270,7 +317,7 @@ export default function CandidatesSection({
             onChange={(e) => setCandidateForm((prev) => ({ ...prev, ci: e.target.value }))}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             placeholder="Ej. 12345678"
-            disabled={isBusy}
+            disabled={formDisabled}
             inputMode="numeric"
           />
         </Field>
@@ -281,7 +328,7 @@ export default function CandidatesSection({
             onChange={(e) => setCandidateForm((prev) => ({ ...prev, nombres: e.target.value }))}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             placeholder="Ej. María Fernanda"
-            disabled={isBusy}
+            disabled={formDisabled}
           />
         </Field>
 
@@ -291,7 +338,7 @@ export default function CandidatesSection({
             onChange={(e) => setCandidateForm((prev) => ({ ...prev, apellidos: e.target.value }))}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             placeholder="Ej. Pérez García"
-            disabled={isBusy}
+            disabled={formDisabled}
           />
         </Field>
 
@@ -300,7 +347,7 @@ export default function CandidatesSection({
             value={candidateForm.eleccionCargoId}
             onChange={(e) => handlePapeletaChange(e.target.value)}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            disabled={isBusy || papeletas.length === 0}
+            disabled={formDisabled || papeletas.length === 0}
           >
             <option value="">Seleccione una papeleta</option>
             {papeletas.map((papeleta) => (
@@ -318,7 +365,7 @@ export default function CandidatesSection({
               setCandidateForm((prev) => ({ ...prev, rolEspecifico: e.target.value }))
             }
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            disabled={isBusy || !candidateForm.eleccionCargoId}
+            disabled={formDisabled || !candidateForm.eleccionCargoId}
           >
             <option value="">
               {candidateForm.eleccionCargoId
@@ -338,7 +385,7 @@ export default function CandidatesSection({
             value={candidateForm.frenteId}
             onChange={(e) => setCandidateForm((prev) => ({ ...prev, frenteId: e.target.value }))}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            disabled={isBusy || coalitions.length === 0}
+            disabled={formDisabled || coalitions.length === 0}
           >
             <option value="">
               {coalitions.length === 0 ? 'Registre un frente primero' : 'Seleccione un frente'}
@@ -362,7 +409,7 @@ export default function CandidatesSection({
                 e.target.value = ''
               }}
               className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-800"
-              disabled={isBusy}
+              disabled={formDisabled}
             />
             {candidateForm.fotoPreview ? (
               <img
@@ -431,22 +478,26 @@ export default function CandidatesSection({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        <button
+                        <ActionButton
                           type="button"
                           onClick={() => handleEditCandidate(candidate)}
                           disabled={isBusy}
+                          readOnly={isElectionReadOnly}
+                          readOnlyTitle={READ_ONLY_ELECTION_HELP}
                           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                         >
                           Editar
-                        </button>
-                        <button
+                        </ActionButton>
+                        <ActionButton
                           type="button"
                           onClick={() => handleDeleteCandidate(candidate.id)}
                           disabled={isBusy}
+                          readOnly={isElectionReadOnly}
+                          readOnlyTitle={READ_ONLY_ELECTION_HELP}
                           className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
                         >
                           Eliminar
-                        </button>
+                        </ActionButton>
                       </div>
                     </td>
                   </tr>

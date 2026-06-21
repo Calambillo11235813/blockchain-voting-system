@@ -9,6 +9,7 @@ import { CrearCargoDto } from 'src/elecciones/dto/cargo/crear-cargo.dto';
 import { ActualizarCargoDto } from 'src/elecciones/dto/cargo/actualizar-cargo.dto';
 import { AlcancePapeletaEnum } from 'src/elecciones/enums/alcance-papeleta.enum';
 import { TipoCargoEnum } from 'src/elecciones/enums/tipo-cargo.enum';
+import { EleccionEstadoService } from './eleccion-estado.service';
 
 /**
  * Servicio de aplicacion para el dominio de cargos y papeletas.
@@ -23,10 +24,12 @@ export class CargoService {
     private readonly eleccionCargoRepository: Repository<EleccionCargo>,
 
     private readonly dataSource: DataSource,
+    private readonly eleccionEstadoService: EleccionEstadoService,
   ) {}
 
   async crearCargo(crearCargoDto: CrearCargoDto): Promise<ApiResponse<Cargo>> {
     this.validarAlcanceDto(crearCargoDto.alcance, crearCargoDto);
+    await this.eleccionEstadoService.assertEnConfiguracion(crearCargoDto.eleccionId);
 
     const { nombre, facultad, eleccionId, tipoCargo, alcance, orden } = crearCargoDto;
 
@@ -101,6 +104,10 @@ export class CargoService {
     actualizarCargoDto: ActualizarCargoDto,
   ): Promise<ApiResponse<Cargo>> {
     const cargo = await this.buscarCargoPorIdOrThrow(cargoId);
+    const eleccionId = await this.obtenerEleccionIdPorCargo(cargoId);
+    if (eleccionId) {
+      await this.eleccionEstadoService.assertEnConfiguracion(eleccionId);
+    }
 
     cargo.nombre = actualizarCargoDto.nombre ?? cargo.nombre;
     cargo.facultad = actualizarCargoDto.facultad ?? cargo.facultad;
@@ -113,6 +120,11 @@ export class CargoService {
   }
 
   async eliminarCargo(cargoId: string): Promise<ApiResponse<null>> {
+    const eleccionId = await this.obtenerEleccionIdPorCargo(cargoId);
+    if (eleccionId) {
+      await this.eleccionEstadoService.assertEnConfiguracion(eleccionId);
+    }
+
     const cargo = await this.buscarCargoPorIdOrThrow(cargoId);
     await this.cargoRepository.remove(cargo);
     return createApiResponse(HttpStatus.OK, null, 'Cargo eliminado correctamente.');
@@ -146,5 +158,14 @@ export class CargoService {
       throw new NotFoundException(`No se encontro el cargo con id ${cargoId}`);
     }
     return cargo;
+  }
+
+  private async obtenerEleccionIdPorCargo(cargoId: string): Promise<string | null> {
+    const eleccionCargo = await this.eleccionCargoRepository.findOne({
+      where: { cargo: { id: cargoId } },
+      relations: { eleccion: true },
+    });
+
+    return eleccionCargo?.eleccion?.id ?? null;
   }
 }

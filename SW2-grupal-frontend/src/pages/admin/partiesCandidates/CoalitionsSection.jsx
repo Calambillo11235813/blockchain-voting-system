@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   createFrente,
   deleteFrente,
   fetchFrentes,
   updateFrente,
 } from '../../../services/electionsService'
+import { handleMutationApiError } from '../../../utils/apiErrorUtils'
+import { READ_ONLY_ELECTION_HELP } from '../../../utils/electionConstants'
 import {
+  ActionButton,
   Field,
+  ReadOnlyElectionBanner,
   Th,
   readImageAsDataUrl,
   validateCoalitionForm,
@@ -22,10 +26,12 @@ import {
  *  setCoalitions: (value: any[]) => void
  *  isLoading: boolean
  *  isBusy: boolean
+ *  isElectionReadOnly: boolean
  *  isCreatingFrente: boolean
  *  setIsCreatingFrente: (value: boolean) => void
  *  setErrorMessage: (value: string) => void
  *  setSuccessMessage: (value: string) => void
+ *  setWarningMessage: (value: string) => void
  * }} props
  * @returns {import('react').JSX.Element}
  */
@@ -36,10 +42,12 @@ export default function CoalitionsSection({
   setCoalitions,
   isLoading,
   isBusy,
+  isElectionReadOnly,
   isCreatingFrente,
   setIsCreatingFrente,
   setErrorMessage,
   setSuccessMessage,
+  setWarningMessage,
 }) {
   const [editingCoalitionId, setEditingCoalitionId] = useState('')
   const [coalitionForm, setCoalitionForm] = useState(() => ({
@@ -58,9 +66,25 @@ export default function CoalitionsSection({
     existingLogoUrl: '',
   })
 
+  const formDisabled = isBusy || isElectionReadOnly
+
+  useEffect(() => {
+    if (!isElectionReadOnly) return
+    setEditingCoalitionId('')
+    setCoalitionForm(resetCoalitionForm())
+  }, [isElectionReadOnly])
+
   const handleCreateFrente = async () => {
     setErrorMessage('')
     setSuccessMessage('')
+    setWarningMessage('')
+
+    if (isElectionReadOnly) {
+      setWarningMessage(
+        '🔒 Acción bloqueada: La elección ya ha sido sellada y no permite modificaciones.',
+      )
+      return
+    }
 
     const validationError = validateCoalitionForm({
       ...coalitionForm,
@@ -98,16 +122,22 @@ export default function CoalitionsSection({
       setCoalitions(updatedFrentes)
       setEditingCoalitionId('')
       setCoalitionForm(resetCoalitionForm())
-    } catch {
-      setErrorMessage('Hubo un problema al guardar el frente. Inténtelo más tarde.')
+    } catch (error) {
+      handleMutationApiError(error, {
+        setWarningMessage,
+        setErrorMessage,
+        defaultMessage: 'Hubo un problema al guardar el frente. Inténtelo más tarde.',
+      })
     } finally {
       setIsCreatingFrente(false)
     }
   }
 
   const handleEditCoalition = (coalition) => {
+    if (isElectionReadOnly) return
     setErrorMessage('')
     setSuccessMessage('')
+    setWarningMessage('')
     setEditingCoalitionId(coalition.id)
     setCoalitionForm({
       nombreFrente: coalition.nombreFrente || '',
@@ -121,6 +151,15 @@ export default function CoalitionsSection({
   const handleDeleteCoalition = async (coalitionId) => {
     setErrorMessage('')
     setSuccessMessage('')
+    setWarningMessage('')
+
+    if (isElectionReadOnly) {
+      setWarningMessage(
+        '🔒 Acción bloqueada: La elección ya ha sido sellada y no permite modificaciones.',
+      )
+      return
+    }
+
     try {
       await deleteFrente(coalitionId)
       const updatedFrentes = await fetchFrentes(eleccionId)
@@ -131,8 +170,12 @@ export default function CoalitionsSection({
         setEditingCoalitionId('')
         setCoalitionForm(resetCoalitionForm())
       }
-    } catch {
-      setErrorMessage('No se pudo eliminar el frente. Inténtelo más tarde.')
+    } catch (error) {
+      handleMutationApiError(error, {
+        setWarningMessage,
+        setErrorMessage,
+        defaultMessage: 'No se pudo eliminar el frente. Inténtelo más tarde.',
+      })
     }
   }
 
@@ -182,10 +225,12 @@ export default function CoalitionsSection({
             </button>
           ) : null}
 
-          <button
+          <ActionButton
             type="button"
             onClick={handleCreateFrente}
             disabled={isBusy}
+            readOnly={isElectionReadOnly}
+            readOnlyTitle={READ_ONLY_ELECTION_HELP}
             className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-yellow-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
           >
             {isCreatingFrente
@@ -193,9 +238,11 @@ export default function CoalitionsSection({
               : editingCoalitionId
                 ? 'Actualizar frente'
                 : 'Registrar frente'}
-          </button>
+          </ActionButton>
         </div>
       </div>
+
+      {isElectionReadOnly ? <ReadOnlyElectionBanner /> : null}
 
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Nombre del frente">
@@ -206,7 +253,7 @@ export default function CoalitionsSection({
             }
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             placeholder="Ej. Renovación Estudiantil"
-            disabled={isBusy}
+            disabled={formDisabled}
           />
         </Field>
 
@@ -216,7 +263,7 @@ export default function CoalitionsSection({
             onChange={(e) => setCoalitionForm((prev) => ({ ...prev, sigla: e.target.value }))}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
             placeholder="Ej. RE"
-            disabled={isBusy}
+            disabled={formDisabled}
           />
         </Field>
 
@@ -231,7 +278,7 @@ export default function CoalitionsSection({
                 e.target.value = ''
               }}
               className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-800"
-              disabled={isBusy}
+              disabled={formDisabled}
             />
             {coalitionForm.logoPreview ? (
               <img
@@ -292,22 +339,26 @@ export default function CoalitionsSection({
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
-                      <button
+                      <ActionButton
                         type="button"
                         onClick={() => handleEditCoalition(coalition)}
                         disabled={isBusy}
+                        readOnly={isElectionReadOnly}
+                        readOnlyTitle={READ_ONLY_ELECTION_HELP}
                         className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                       >
                         Editar
-                      </button>
-                      <button
+                      </ActionButton>
+                      <ActionButton
                         type="button"
                         onClick={() => handleDeleteCoalition(coalition.id)}
                         disabled={isBusy}
+                        readOnly={isElectionReadOnly}
+                        readOnlyTitle={READ_ONLY_ELECTION_HELP}
                         className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
                       >
                         Eliminar
-                      </button>
+                      </ActionButton>
                     </div>
                   </td>
                 </tr>

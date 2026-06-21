@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
+  abrirJornada,
+  cerrarJornada,
   createElection,
   createPosition,
   deleteElection,
@@ -10,6 +13,8 @@ import {
   updatePosition,
 } from '../../../services/electionsService'
 import PapeletaForm from './PapeletaForm'
+import AbrirJornadaModal from './components/AbrirJornadaModal'
+import CerrarJornadaModal from './components/CerrarJornadaModal'
 import {
   ALCANCE_LABELS,
   ALCANCE_PAPELETA,
@@ -18,6 +23,14 @@ import {
   formatPositionAmbito,
   validatePositionForm,
 } from '../../../utils/papeletaConstants'
+import {
+  ESTADO_ELECCION,
+  canAbrirJornada,
+  canCerrarJornada,
+  formatEstadoEleccion,
+  getEstadoEleccionBadgeClass,
+  isJornadaFinalizada,
+} from '../../../utils/electionConstants'
 
 /**
  * Sección de Gestión de Elección.
@@ -33,6 +46,13 @@ export default function ElectionManagement() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingElection, setIsSavingElection] = useState(false)
   const [isSavingPosition, setIsSavingPosition] = useState(false)
+  const [isJornadaSubmitting, setIsJornadaSubmitting] = useState(false)
+
+  const [jornadaModal, setJornadaModal] = useState(() => ({
+    type: '',
+    electionId: '',
+    electionLabel: '',
+  }))
 
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -44,19 +64,24 @@ export default function ElectionManagement() {
     title: '',
     year: '',
     dateLocal: '',
-    isActive: true,
     isSurnameRestrictionActive: true,
   }))
 
   const [positionForm, setPositionForm] = useState(() => createEmptyPositionForm())
 
-  const electionLabelById = useMemo(() => {
-    const map = new Map()
-    for (const election of elections) {
-      map.set(election.id, `${election.titulo} (${election.gestion})`)
+  const [activeView, setActiveView] = useState('elecciones')
+  const [selectedElection, setSelectedElection] = useState(null)
+
+  useEffect(() => {
+    if (!selectedElection) return
+    const updated = elections.find((election) => election.id === selectedElection.id)
+    if (updated) {
+      setSelectedElection(updated)
+    } else {
+      setSelectedElection(null)
+      setActiveView('elecciones')
     }
-    return map
-  }, [elections])
+  }, [elections, selectedElection?.id])
 
   useEffect(() => {
     let isMounted = true
@@ -97,7 +122,7 @@ export default function ElectionManagement() {
     }
   }, [])
 
-  const isBusy = isLoading || isSavingElection || isSavingPosition
+  const isBusy = isLoading || isSavingElection || isSavingPosition || isJornadaSubmitting
 
   const resetMessages = () => {
     setErrorMessage('')
@@ -110,14 +135,39 @@ export default function ElectionManagement() {
       title: '',
       year: '',
       dateLocal: '',
-      isActive: true,
       isSurnameRestrictionActive: true,
     })
   }
 
   const resetPositionForm = () => {
     setEditingPositionId('')
-    setPositionForm(createEmptyPositionForm(elections[0]?.id || ''))
+    const electionId = selectedElection?.id || elections[0]?.id || ''
+    setPositionForm(createEmptyPositionForm(electionId))
+  }
+
+  const visiblePositions = useMemo(() => {
+    if (!selectedElection) return positions
+    return positions.filter(
+      (position) => (position?.eleccion?.id || position.eleccionId) === selectedElection.id,
+    )
+  }, [positions, selectedElection])
+
+  const electionsForPapeletaForm = useMemo(() => {
+    if (selectedElection) return [selectedElection]
+    return elections
+  }, [elections, selectedElection])
+
+  const handleOpenPapeletas = (election) => {
+    resetMessages()
+    setSelectedElection(election)
+    setEditingPositionId('')
+    setPositionForm(createEmptyPositionForm(election.id))
+    setActiveView('papeletas')
+  }
+
+  const handleBackToElecciones = () => {
+    resetMessages()
+    setActiveView('elecciones')
   }
 
   const refreshLists = async () => {
@@ -142,7 +192,6 @@ export default function ElectionManagement() {
       titulo: electionForm.title.trim(),
       gestion: Number(electionForm.year),
       fecha: electionForm.dateLocal,
-      estaActiva: Boolean(electionForm.isActive),
       restriccionAlfabeticaActiva: Boolean(electionForm.isSurnameRestrictionActive),
     }
 
@@ -173,9 +222,60 @@ export default function ElectionManagement() {
       title: election.titulo || '',
       year: String(election.gestion ?? ''),
       dateLocal: toDateInputValue(election.fecha),
-      isActive: Boolean(election.estaActiva),
       isSurnameRestrictionActive: Boolean(election.restriccionAlfabeticaActiva ?? true),
     })
+  }
+
+  const isElectionLocked = (election) => {
+    const estado = election.estado || ESTADO_ELECCION.EN_CONFIGURACION
+    return estado === ESTADO_ELECCION.ACTIVA || estado === ESTADO_ELECCION.FINALIZADA
+  }
+
+  const openJornadaModal = (type, election) => {
+    resetMessages()
+    setJornadaModal({
+      type,
+      electionId: election.id,
+      electionLabel: `${election.titulo} (${election.gestion})`,
+    })
+  }
+
+  const closeJornadaModal = () => {
+    if (isJornadaSubmitting) return
+    setJornadaModal({ type: '', electionId: '', electionLabel: '' })
+  }
+
+  const resetJornadaModal = () => {
+    setJornadaModal({ type: '', electionId: '', electionLabel: '' })
+  }
+
+  const handleConfirmJornada = async () => {
+    if (!jornadaModal.electionId || !jornadaModal.type) return
+
+    resetMessages()
+    try {
+      setIsJornadaSubmitting(true)
+      if (jornadaModal.type === 'abrir') {
+        await abrirJornada(jornadaModal.electionId)
+        setSuccessMessage('Jornada electoral abierta correctamente.')
+      } else {
+        await cerrarJornada(jornadaModal.electionId)
+        setSuccessMessage('Jornada electoral cerrada correctamente.')
+      }
+      await refreshLists()
+      resetJornadaModal()
+    } catch (error) {
+      setErrorMessage(
+        getFriendlyErrorMessage(
+          error,
+          jornadaModal.type === 'abrir'
+            ? 'No se pudo abrir la jornada electoral.'
+            : 'No se pudo cerrar la jornada electoral.',
+        ),
+      )
+    } finally {
+      setIsJornadaSubmitting(false)
+    }
   }
 
   const handleToggleRestriction = async (electionId, nextValue) => {
@@ -213,6 +313,10 @@ export default function ElectionManagement() {
 
       if (editingElectionId === electionId) {
         resetElectionForm()
+      }
+      if (selectedElection?.id === electionId) {
+        setSelectedElection(null)
+        setActiveView('elecciones')
       }
     } catch (error) {
       setErrorMessage(getFriendlyErrorMessage(error, 'No se pudo eliminar la elección.'))
@@ -288,10 +392,55 @@ export default function ElectionManagement() {
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-blue-900">Gestión de Elección</h2>
-        <p className="mt-1 text-sm text-slate-700">
-          Primero crea la elección y luego registra los cargos correspondientes.
-        </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-blue-900">Gestión de Elección</h2>
+            <p className="mt-1 text-sm text-slate-700">
+              {activeView === 'elecciones'
+                ? 'Crea y administra los procesos electorales. Desde cada fila puede configurar sus papeletas.'
+                : selectedElection
+                  ? `Papeletas de ${selectedElection.titulo} (${selectedElection.gestion})`
+                  : 'Registre las papeletas del proceso con alcance global, por facultad o por carrera.'}
+            </p>
+          </div>
+
+          {activeView === 'papeletas' ? (
+            <button
+              type="button"
+              onClick={handleBackToElecciones}
+              disabled={isBusy}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-blue-900 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span aria-hidden="true">←</span>
+              Volver a Elecciones
+            </button>
+          ) : null}
+        </div>
+
+        <nav
+          className="mt-5 flex gap-1 overflow-x-auto border-b border-slate-200"
+          aria-label="Vistas de gestión electoral"
+        >
+          <ViewTab
+            active={activeView === 'elecciones'}
+            onClick={handleBackToElecciones}
+            disabled={isBusy}
+          >
+            Elecciones
+          </ViewTab>
+          <ViewTab
+            active={activeView === 'papeletas'}
+            onClick={() => selectedElection && setActiveView('papeletas')}
+            disabled={isBusy || !selectedElection}
+          >
+            Papeletas
+            {selectedElection ? (
+              <span className="ml-1 hidden font-normal text-slate-500 sm:inline">
+                · {selectedElection.titulo}
+              </span>
+            ) : null}
+          </ViewTab>
+        </nav>
 
         {errorMessage ? (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -306,9 +455,9 @@ export default function ElectionManagement() {
         ) : null}
       </section>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
+      {activeView === 'elecciones' ? (
+        <section className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-base font-semibold text-blue-900">Elecciones</h3>
               <p className="mt-1 text-sm text-slate-700">Crea, edita o elimina el proceso electoral.</p>
@@ -342,7 +491,7 @@ export default function ElectionManagement() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Título">
               <input
                 value={electionForm.title}
@@ -380,20 +529,7 @@ export default function ElectionManagement() {
               </div>
             </Field>
 
-            <div className="sm:col-span-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={Boolean(electionForm.isActive)}
-                  onChange={(e) => setElectionForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                  disabled={isBusy}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-                <span className="text-sm font-semibold text-slate-900">Elección activa</span>
-              </label>
-            </div>
-
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-4">
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -402,7 +538,6 @@ export default function ElectionManagement() {
                     const nextValue = e.target.checked
                     setElectionForm((prev) => ({ ...prev, isSurnameRestrictionActive: nextValue }))
 
-                    // Guardado inmediato solo en modo edición.
                     if (editingElectionId) {
                       handleToggleRestriction(editingElectionId, nextValue)
                     }
@@ -431,89 +566,165 @@ export default function ElectionManagement() {
                   <Th>Horario</Th>
                   <Th>Flujo</Th>
                   <Th>Estado</Th>
+                  <Th>Jornada</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {isLoading ? (
                   <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={7}>
+                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={8}>
                       Cargando elecciones…
                     </td>
                   </tr>
                 ) : elections.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={7}>
+                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={8}>
                       No hay elecciones registradas.
                     </td>
                   </tr>
                 ) : (
-                  elections.map((election) => (
-                    <tr key={election.id}>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{election.titulo}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{election.gestion}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{formatElectionDate(election.fecha)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">08:00 a 16:00</td>
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleToggleRestriction(
-                              election.id,
-                              !(election.restriccionAlfabeticaActiva ?? true),
-                            )
-                          }
-                          disabled={isBusy}
-                          className={
-                            (election.restriccionAlfabeticaActiva ?? true)
-                              ? 'inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900 hover:bg-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600'
-                              : 'inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600'
-                          }
-                          title="Cambiar flujo de acceso por apellido"
-                        >
-                          {(election.restriccionAlfabeticaActiva ?? true)
-                            ? 'Controlado (A-Z)'
-                            : 'Libre'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-700">
-                        {election.estaActiva ? 'Activa' : 'Inactiva'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-2">
+                  elections.map((election) => {
+                    const estado = election.estado || ESTADO_ELECCION.EN_CONFIGURACION
+                    const locked = isElectionLocked(election)
+
+                    return (
+                      <tr key={election.id}>
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{election.titulo}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{election.gestion}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{formatElectionDate(election.fecha)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">08:00 a 16:00</td>
+                        <td className="px-4 py-3">
                           <button
                             type="button"
-                            onClick={() => handleEditElection(election)}
-                            disabled={isBusy}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                            onClick={() =>
+                              handleToggleRestriction(
+                                election.id,
+                                !(election.restriccionAlfabeticaActiva ?? true),
+                              )
+                            }
+                            disabled={isBusy || locked}
+                            className={
+                              (election.restriccionAlfabeticaActiva ?? true)
+                                ? 'inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900 hover:bg-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600'
+                                : 'inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600'
+                            }
+                            title="Cambiar flujo de acceso por apellido"
                           >
-                            Editar
+                            {(election.restriccionAlfabeticaActiva ?? true)
+                              ? 'Controlado (A-Z)'
+                              : 'Libre'}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteElection(election.id)}
-                            disabled={isBusy}
-                            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${getEstadoEleccionBadgeClass(estado)}`}
                           >
-                            Eliminar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {formatEstadoEleccion(estado)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {canAbrirJornada(estado) ? (
+                            <button
+                              type="button"
+                              onClick={() => openJornadaModal('abrir', election)}
+                              disabled={isBusy}
+                              className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                            >
+                              Abrir Votación
+                            </button>
+                          ) : canCerrarJornada(estado, election.estaActiva) ? (
+                            <button
+                              type="button"
+                              onClick={() => openJornadaModal('cerrar', election)}
+                              disabled={isBusy}
+                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                            >
+                              Cerrar Votación
+                            </button>
+                          ) : isJornadaFinalizada(estado) ? (
+                            <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-900">
+                              Jornada finalizada
+                            </span>
+                          ) : (
+                            <p className="max-w-[12rem] text-xs text-slate-500">
+                              Debe sellar la elección primero.{' '}
+                              <Link
+                                to="/admin/configuracion-papeleta"
+                                className="font-semibold text-blue-900 underline hover:text-blue-700"
+                              >
+                                Configuración de Papeleta
+                              </Link>
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPapeletas(election)}
+                              disabled={isBusy}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-600"
+                            >
+                              <svg
+                                className="h-3.5 w-3.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                                aria-hidden="true"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                />
+                              </svg>
+                              Configurar Papeletas
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEditElection(election)}
+                              disabled={isBusy || locked}
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteElection(election.id)}
+                              disabled={isBusy || locked}
+                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </section>
-
-        <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
+      ) : (
+        <section className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-base font-semibold text-blue-900">Papeletas / Cargos</h3>
-              <p className="mt-1 text-sm text-slate-700">
-                Registre las papeletas del proceso con alcance global, por facultad o por carrera.
-              </p>
+              {selectedElection ? (
+                <p className="mt-1 text-sm text-slate-700">
+                  Proceso:{' '}
+                  <span className="font-semibold text-blue-900">
+                    {selectedElection.titulo} ({selectedElection.gestion})
+                  </span>
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-slate-700">
+                  Seleccione una elección desde la vista anterior para configurar papeletas.
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {editingPositionId ? (
@@ -532,7 +743,7 @@ export default function ElectionManagement() {
               <button
                 type="button"
                 onClick={handleSavePosition}
-                disabled={isBusy || elections.length === 0}
+                disabled={isBusy || !selectedElection}
                 className="rounded-lg bg-yellow-500 px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-yellow-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
               >
                 {isSavingPosition
@@ -544,88 +755,131 @@ export default function ElectionManagement() {
             </div>
           </div>
 
-          {elections.length === 0 ? (
-            <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900">Primero cree una elección</p>
+          {!selectedElection ? (
+            <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-center">
+              <p className="text-sm font-semibold text-slate-900">No hay elección seleccionada</p>
               <p className="mt-1 text-sm text-slate-700">
-                Para registrar cargos, debe existir al menos una elección.
+                Vuelva a la vista de elecciones y elija &quot;Configurar Papeletas&quot; en la fila deseada.
               </p>
+              <button
+                type="button"
+                onClick={handleBackToElecciones}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-slate-50"
+              >
+                ← Volver a Elecciones
+              </button>
             </div>
           ) : (
-            <PapeletaForm
-              positionForm={positionForm}
-              setPositionForm={setPositionForm}
-              elections={elections}
-              isBusy={isBusy}
-              isEditing={Boolean(editingPositionId)}
-              onCatalogError={setErrorMessage}
-            />
-          )}
+            <>
+              <PapeletaForm
+                positionForm={positionForm}
+                setPositionForm={setPositionForm}
+                elections={electionsForPapeletaForm}
+                isBusy={isBusy}
+                isEditing={Boolean(editingPositionId)}
+                onCatalogError={setErrorMessage}
+              />
 
-          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
-                <tr>
-                  <Th>Cargo</Th>
-                  <Th>Alcance</Th>
-                  <Th>Ámbito</Th>
-                  <Th>Elección</Th>
-                  <Th>Acciones</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {isLoading ? (
-                  <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={5}>
-                      Cargando cargos…
-                    </td>
-                  </tr>
-                ) : positions.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-3 text-sm text-slate-700" colSpan={5}>
-                      No hay papeletas registradas.
-                    </td>
-                  </tr>
-                ) : (
-                  positions.map((position) => (
-                    <tr key={position.id}>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-900">{position.nombre}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">
-                        {ALCANCE_LABELS[position.alcance] || position.alcance || ALCANCE_LABELS.GLOBAL}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-700">{formatPositionAmbito(position)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700">
-                        {position?.eleccion ? `${position.eleccion.titulo} (${position.eleccion.gestion})` : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEditPosition(position)}
-                            disabled={isBusy}
-                            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeletePosition(position.id)}
-                            disabled={isBusy}
-                            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      </td>
+              <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <Th>Cargo</Th>
+                      <Th>Alcance</Th>
+                      <Th>Ámbito</Th>
+                      <Th>Acciones</Th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {isLoading ? (
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-slate-700" colSpan={4}>
+                          Cargando cargos…
+                        </td>
+                      </tr>
+                    ) : visiblePositions.length === 0 ? (
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-slate-700" colSpan={4}>
+                          No hay papeletas registradas para esta elección.
+                        </td>
+                      </tr>
+                    ) : (
+                      visiblePositions.map((position) => (
+                        <tr key={position.id}>
+                          <td className="px-4 py-3 text-sm font-semibold text-slate-900">{position.nombre}</td>
+                          <td className="px-4 py-3 text-sm text-slate-700">
+                            {ALCANCE_LABELS[position.alcance] || position.alcance || ALCANCE_LABELS.GLOBAL}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-700">{formatPositionAmbito(position)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditPosition(position)}
+                                disabled={isBusy}
+                                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePosition(position.id)}
+                                disabled={isBusy}
+                                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </section>
-      </div>
+      )}
+
+      <AbrirJornadaModal
+        open={jornadaModal.type === 'abrir'}
+        electionLabel={jornadaModal.electionLabel}
+        isSubmitting={isJornadaSubmitting}
+        onClose={closeJornadaModal}
+        onConfirm={handleConfirmJornada}
+      />
+
+      <CerrarJornadaModal
+        open={jornadaModal.type === 'cerrar'}
+        electionLabel={jornadaModal.electionLabel}
+        isSubmitting={isJornadaSubmitting}
+        onClose={closeJornadaModal}
+        onConfirm={handleConfirmJornada}
+      />
     </div>
+  )
+}
+
+/**
+ * Pestaña de navegación entre vistas.
+ * @param {{ active: boolean, disabled?: boolean, onClick: () => void, children: import('react').ReactNode }} props
+ * @returns {import('react').JSX.Element}
+ */
+function ViewTab({ active, disabled = false, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={
+        active
+          ? '-mb-px border-b-2 border-blue-900 px-4 py-2.5 text-sm font-semibold text-blue-900'
+          : 'border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:border-transparent'
+      }
+    >
+      {children}
+    </button>
   )
 }
 

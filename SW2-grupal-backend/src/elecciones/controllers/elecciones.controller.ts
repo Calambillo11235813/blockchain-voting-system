@@ -10,12 +10,16 @@ import {
   Post,
   Query,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ElectoralGuard } from 'src/administradores/guards/electoral.guard';
 import { EleccionesLegacyService } from '../services/elecciones.service';
 import { PadronService } from '../services/padron.service';
 import { FrenteService } from '../services/frente.service';
+import { JornadaService } from '../services/jornada.service';
 import { ApiResponse } from 'src/compartido/respuesta';
 import { Eleccion } from '../entities/eleccion.entity';
 import { Frente } from '../entities/frente.entity';
@@ -32,6 +36,7 @@ export class EleccionesController {
     private readonly eleccionesService: EleccionesLegacyService,
     private readonly padronService: PadronService,
     private readonly frenteService: FrenteService,
+    private readonly jornadaService: JornadaService,
   ) {}
 
   /**
@@ -65,6 +70,52 @@ export class EleccionesController {
     @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
   ): Promise<ApiResponse<Eleccion>> {
     return this.eleccionesService.obtenerEleccionPorId(eleccionId);
+  }
+
+  /**
+   * Actualiza una eleccion por ID.
+   * @param eleccionId Identificador UUID de la eleccion.
+   * @param actualizarEleccionDto Campos a actualizar.
+   * @returns Eleccion actualizada.
+   */
+  @Patch(':eleccionId/sellar')
+  async sellarEleccion(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<Eleccion>> {
+    return this.eleccionesService.sellarEleccion(eleccionId);
+  }
+
+  /**
+   * Abre la jornada electoral (SELLADA → ACTIVA).
+   */
+  @Patch(':eleccionId/abrir')
+  @UseGuards(AuthGuard('jwt'), ElectoralGuard)
+  async abrirJornada(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<Eleccion>> {
+    return this.jornadaService.controlarEstadoJornada(eleccionId, 'ABRIR');
+  }
+
+  /**
+   * Cierra la jornada electoral (ACTIVA → FINALIZADA).
+   */
+  @Patch(':eleccionId/cerrar')
+  @UseGuards(AuthGuard('jwt'), ElectoralGuard)
+  async cerrarJornada(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ): Promise<ApiResponse<Eleccion>> {
+    return this.jornadaService.controlarEstadoJornada(eleccionId, 'CERRAR');
+  }
+
+  /**
+   * Consulta el estado de la jornada sin mutarla.
+   */
+  @Get(':eleccionId/jornada')
+  @UseGuards(AuthGuard('jwt'), ElectoralGuard)
+  async obtenerEstadoJornada(
+    @Param('eleccionId', ParseUUIDPipe) eleccionId: string,
+  ) {
+    return this.jornadaService.obtenerEstadoJornada(eleccionId);
   }
 
   /**

@@ -1,56 +1,58 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchElections } from '../../../services/electionsService'
-import { 
-  getParticipacion, 
-  getEstadisticasEstudiantes, 
-  getEstadisticasDocentes 
-} from '../../../services/estadisticasService'
+import { getEstadisticasJerarquicas } from '../../../services/estadisticasService'
+import { formatEstadoEleccion } from '../../../utils/electionConstants'
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts'
+  ALCANCE_TAB,
+  ALCANCE_TAB_LABELS,
+  formatPapeletaStatsLabel,
+  getDefaultScope,
+  groupPapeletasByAlcance,
+  isPreVotingSealedState,
+} from '../../../utils/estadisticasHierarchy'
+import BallotParticipationPanel from './components/estadisticas/BallotParticipationPanel'
+import StatsSummaryCards from './components/estadisticas/StatsSummaryCards'
+
+const TAB_ORDER = [ALCANCE_TAB.GLOBAL, ALCANCE_TAB.FACULTAD, ALCANCE_TAB.CARRERA]
 
 export default function EstadisticasEnVivo() {
   const [elections, setElections] = useState([])
   const [selectedElectionId, setSelectedElectionId] = useState('')
+  const [stats, setStats] = useState(null)
+
+  const [activeScope, setActiveScope] = useState(ALCANCE_TAB.GLOBAL)
+  const [selectedPapeletaId, setSelectedPapeletaId] = useState('')
+
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
-  const [participacion, setParticipacion] = useState(null)
-  const [estudiantes, setEstudiantes] = useState(null)
-  const [docentes, setDocentes] = useState(null)
-
-  // Cargar elecciones iniciales
   useEffect(() => {
     let isMounted = true
-    async function load() {
+
+    async function loadElections() {
       try {
         const data = await fetchElections()
-        if (isMounted) {
-          setElections(data)
-          if (data.length > 0) {
-            setSelectedElectionId(data[0].id)
-          }
+        if (!isMounted) return
+        setElections(data)
+        if (data.length > 0) {
+          setSelectedElectionId(data[0].id)
         }
-      } catch (err) {
-        console.error('Error al cargar elecciones:', err)
-        if (isMounted) setErrorMsg('No se pudieron cargar las elecciones.')
+      } catch {
+        if (!isMounted) return
+        setErrorMsg('No se pudieron cargar las elecciones.')
       } finally {
-        if (isMounted) setIsLoading(false)
+        if (!isMounted) return
+        setIsLoading(false)
       }
     }
-    load()
-    return () => { isMounted = false }
+
+    loadElections()
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  // Cargar estadísticas cada vez que cambie la elección o se presione refresh
   useEffect(() => {
     if (!selectedElectionId) return
 
@@ -61,29 +63,20 @@ export default function EstadisticasEnVivo() {
       try {
         setIsRefreshing(true)
         setErrorMsg('')
-        
-        const [part, est, doc] = await Promise.all([
-          getParticipacion(selectedElectionId),
-          getEstadisticasEstudiantes(selectedElectionId),
-          getEstadisticasDocentes(selectedElectionId)
-        ])
-
-        if (isMounted) {
-          setParticipacion(part)
-          setEstudiantes(est)
-          setDocentes(doc)
-        }
-      } catch (err) {
-        console.error('Error al cargar estadísticas:', err)
-        if (isMounted) setErrorMsg('Error al obtener los datos en vivo.')
+        const data = await getEstadisticasJerarquicas(selectedElectionId)
+        if (!isMounted) return
+        setStats(data)
+      } catch {
+        if (!isMounted) return
+        setErrorMsg('Error al obtener los datos en vivo.')
+        setStats(null)
       } finally {
-        if (isMounted) setIsRefreshing(false)
+        if (!isMounted) return
+        setIsRefreshing(false)
       }
     }
 
     fetchData()
-
-    // Polling cada 10 segundos
     pollingTimer = setInterval(fetchData, 10000)
 
     return () => {
@@ -92,43 +85,81 @@ export default function EstadisticasEnVivo() {
     }
   }, [selectedElectionId])
 
-  // Preparar datos para el gráfico comparativo
-  const chartData = useMemo(() => {
-    if (!participacion?.porEstamento) return []
-    const p = participacion.porEstamento
-    return [
-      { name: 'Estudiantil', Habilitados: p.estudiante?.habilitados || 0, Emitidos: p.estudiante?.votos || 0 },
-      { name: 'Docente', Habilitados: p.docente?.habilitados || 0, Emitidos: p.docente?.votos || 0 },
-      { name: 'Administrativo', Habilitados: p.administrativo?.habilitados || 0, Emitidos: p.administrativo?.votos || 0 }
-    ].filter(item => item.Habilitados > 0 || item.Emitidos > 0)
-  }, [participacion])
+  const groupedPapeletas = useMemo(
+    () => groupPapeletasByAlcance(stats?.papeletas ?? []),
+    [stats?.papeletas],
+  )
+
+  const availableTabs = useMemo(
+    () => TAB_ORDER.filter((scope) => groupedPapeletas[scope]?.length > 0),
+    [groupedPapeletas],
+  )
+
+  useEffect(() => {
+    if (!stats) return
+
+    const defaultScope = getDefaultScope(groupedPapeletas)
+    setActiveScope((prev) =>
+      groupedPapeletas[prev]?.length ? prev : defaultScope,
+    )
+  }, [stats, groupedPapeletas])
+
+  const papeletasInScope = groupedPapeletas[activeScope] ?? []
+
+  useEffect(() => {
+    if (!papeletasInScope.length) {
+      setSelectedPapeletaId('')
+      return
+    }
+
+    setSelectedPapeletaId((prev) => {
+      if (prev && papeletasInScope.some((p) => p.eleccionCargoId === prev)) {
+        return prev
+      }
+      return papeletasInScope[0].eleccionCargoId
+    })
+  }, [activeScope, papeletasInScope])
+
+  const selectedPapeleta = useMemo(
+    () => papeletasInScope.find((p) => p.eleccionCargoId === selectedPapeletaId) ?? null,
+    [papeletasInScope, selectedPapeletaId],
+  )
+
+  const showPreVotingNotice = isPreVotingSealedState(stats)
+  const selectedElection = elections.find((e) => e.id === selectedElectionId)
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-blue-900">Dashboard en Vivo</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Monitoreo en tiempo real de la participación electoral.
+            Monitoreo en tiempo real de la participación por papeleta y alcance.
           </p>
         </div>
+
+        {stats?.ultimaActualizacion ? (
+          <p className="text-xs text-slate-500">
+            Última actualización:{' '}
+            {new Date(stats.ultimaActualizacion).toLocaleTimeString('es-BO')}
+            {isRefreshing ? ' · Actualizando…' : ''}
+          </p>
+        ) : null}
       </header>
 
-      {errorMsg && (
-        <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">
+      {errorMsg ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorMsg}
         </div>
-      )}
+      ) : null}
 
       {isLoading ? (
-        <div className="text-sm text-slate-500">Cargando dashboard...</div>
+        <div className="text-sm text-slate-500">Cargando dashboard…</div>
       ) : (
         <>
-          <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="w-full sm:max-w-md">
-              <label className="block text-sm font-medium text-slate-800">
-                Seleccionar Elección
-              </label>
+              <label className="block text-sm font-medium text-slate-800">Seleccionar elección</label>
               <select
                 value={selectedElectionId}
                 onChange={(e) => setSelectedElectionId(e.target.value)}
@@ -141,114 +172,83 @@ export default function EstadisticasEnVivo() {
                 ))}
               </select>
             </div>
-            {isRefreshing && (
-              <span className="text-xs text-yellow-600 font-medium pb-2 animate-pulse">
-                Actualizando...
-              </span>
-            )}
+
+            {stats ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800">
+                Estado:{' '}
+                <span className="font-semibold">
+                  {formatEstadoEleccion(stats.estado || selectedElection?.estado)}
+                </span>
+              </div>
+            ) : null}
           </div>
 
-          {participacion && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase text-slate-500">Total Habilitados</p>
-                <p className="mt-2 text-3xl font-bold text-blue-900">{participacion.totalHabilitados}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase text-slate-500">Votos Emitidos</p>
-                <p className="mt-2 text-3xl font-bold text-blue-900">{participacion.totalVotosEmitidos}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-blue-900 p-5 shadow-sm text-white">
-                <p className="text-xs font-semibold uppercase text-blue-200">Participación Global</p>
-                <p className="mt-2 text-3xl font-bold text-yellow-500">
-                  {Number(participacion.porcentajeParticipacion || 0).toFixed(2)}%
-                </p>
-              </div>
-            </div>
-          )}
+          {stats ? (
+            <>
+              <StatsSummaryCards
+                resumen={stats.resumenGeneral}
+                papeletasCount={stats.papeletas?.length ?? 0}
+              />
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            {/* Estudiantes */}
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-bold text-blue-900 mb-4 border-b pb-2">Estamento Estudiantil</h3>
-              {estudiantes ? (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center bg-slate-50 p-3 rounded">
-                    <span className="text-sm font-semibold text-slate-700">Participación General:</span>
-                    <span className="text-lg font-bold text-blue-900">
-                      {Number(estudiantes.porcentajeParticipacion || 0).toFixed(2)}%
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Desglose por Subgrupo</p>
-                    <ul className="space-y-2">
-                      {(estudiantes.desglosePorCarrera || []).map((item, idx) => (
-                        <li key={idx} className="flex justify-between text-sm">
-                          <span className="text-slate-700">{item.carrera}</span>
-                          <span className="font-medium text-blue-900">
-                            {Number(item.porcentaje || 0).toFixed(2)}% ({item.votos}/{item.habilitados})
+              {availableTabs.length ? (
+                <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex flex-wrap gap-2">
+                      {availableTabs.map((scope) => (
+                        <button
+                          key={scope}
+                          type="button"
+                          onClick={() => setActiveScope(scope)}
+                          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                            activeScope === scope
+                              ? 'bg-blue-900 text-white'
+                              : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {ALCANCE_TAB_LABELS[scope]}
+                          <span className="ml-2 rounded-full bg-black/10 px-2 py-0.5 text-xs">
+                            {groupedPapeletas[scope]?.length ?? 0}
                           </span>
-                        </li>
+                        </button>
                       ))}
-                    </ul>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">No hay datos disponibles.</p>
-              )}
-            </div>
+                    </div>
 
-            {/* Docentes */}
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-bold text-blue-900 mb-4 border-b pb-2">Estamento Docente</h3>
-              {docentes ? (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center bg-slate-50 p-3 rounded">
-                    <span className="text-sm font-semibold text-slate-700">Participación General:</span>
-                    <span className="text-lg font-bold text-blue-900">
-                      {Number(docentes.porcentajeParticipacion || 0).toFixed(2)}%
-                    </span>
+                    {papeletasInScope.length > 1 ? (
+                      <div className="w-full lg:max-w-md">
+                        <label className="block text-xs font-semibold text-slate-900">
+                          Papeleta en {ALCANCE_TAB_LABELS[activeScope]}
+                        </label>
+                        <select
+                          value={selectedPapeletaId}
+                          onChange={(e) => setSelectedPapeletaId(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                        >
+                          {papeletasInScope.map((papeleta) => (
+                            <option key={papeleta.eleccionCargoId} value={papeleta.eleccionCargoId}>
+                              {formatPapeletaStatsLabel(papeleta)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : null}
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-slate-500 mb-2">Desglose por Subgrupo</p>
-                    <ul className="space-y-2">
-                      {(docentes.desglosePorCarrera || []).map((item, idx) => (
-                        <li key={idx} className="flex justify-between text-sm">
-                          <span className="text-slate-700">{item.carrera}</span>
-                          <span className="font-medium text-blue-900">
-                            {Number(item.porcentaje || 0).toFixed(2)}% ({item.votos}/{item.habilitados})
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">No hay datos disponibles.</p>
-              )}
-            </div>
-          </div>
 
-          {/* Gráfico Comparativo */}
-          {chartData.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-bold text-blue-900 mb-6">Comparativa de Participación</h3>
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chartData}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip cursor={{fill: '#f8fafc'}} />
-                    <Legend />
-                    <Bar dataKey="Habilitados" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Emitidos" fill="#f2a900" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+                  <div className="mt-5">
+                    <BallotParticipationPanel
+                      papeleta={selectedPapeleta}
+                      showPreVotingNotice={showPreVotingNotice}
+                    />
+                  </div>
+                </section>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-700">
+                  Esta elección aún no tiene papeletas configuradas para monitorear.
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-700">
+              Seleccione una elección para ver las estadísticas en vivo.
             </div>
           )}
         </>
@@ -256,4 +256,3 @@ export default function EstadisticasEnVivo() {
     </div>
   )
 }
-

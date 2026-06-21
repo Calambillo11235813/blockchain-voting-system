@@ -83,7 +83,7 @@ describe('PapeletaEligibilityService', () => {
     expect(service.esPapeletaAplicable(otroElector, papeleta, padronHabilitado)).toBe(false);
   });
 
-  it('filtra papeleta CARRERA por codFacultad y codCarrera', () => {
+  it('filtra papeleta CARRERA por codFacultad y codCarrera para estudiantes', () => {
     const papeleta = crearPapeleta({
       alcance: AlcancePapeletaEnum.CARRERA,
       codFacultad: '15',
@@ -101,5 +101,32 @@ describe('PapeletaEligibilityService', () => {
 
     const otraCarrera = { ...baseElector, codCarrera: '999-9' };
     expect(service.esPapeletaAplicable(otraCarrera, papeleta, padronHabilitado)).toBe(false);
+  });
+
+  it('incluye docentes de la facultad en papeleta CARRERA aunque no tengan codCarrera', () => {
+    const papeleta = crearPapeleta({
+      alcance: AlcancePapeletaEnum.CARRERA,
+      codFacultad: '15',
+      codCarrera: '157-1',
+      cargo: {
+        id: 'c3',
+        nombre: 'Director de Carrera',
+        facultad: '',
+        tipoCargo: TipoCargoEnum.DIRECTOR_CARRERA,
+        eleccionCargos: [],
+      },
+    });
+
+    const docente: Elector = {
+      ...baseElector,
+      estamento: EstamentoEnum.DOCENTE,
+      codCarrera: null,
+      carrera: 'DEPARTAMENTO INGENIERIA',
+    };
+
+    expect(service.esPapeletaAplicable(docente, papeleta, padronHabilitado)).toBe(true);
+
+    const docenteOtraFacultad = { ...docente, codFacultad: '99' };
+    expect(service.esPapeletaAplicable(docenteOtraFacultad, papeleta, padronHabilitado)).toBe(false);
   });
 });

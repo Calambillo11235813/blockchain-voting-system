@@ -13,6 +13,7 @@ export interface CandidatoPapeleta {
   nombres: string;
   apellidos: string;
   fotoUrl: string | null;
+  rolEspecifico: string | null;
 }
 
 export interface FrentePapeleta {
@@ -44,6 +45,7 @@ export interface PapeletaDigital {
   gestion: number;
   fecha: Date;
   estaActiva: boolean;
+  estado: string;
   cargos: EleccionCargoPapeleta[];
 }
 
@@ -116,6 +118,7 @@ export class PapeletaService {
       gestion: eleccion.gestion,
       fecha: eleccion.fecha,
       estaActiva: eleccion.estaActiva,
+      estado: eleccion.estado,
       cargos: cargosOrdenados.map((ec) => this.serializarPapeleta(ec)),
     };
   }
@@ -143,6 +146,7 @@ export class PapeletaService {
         nombres: candidato.nombres,
         apellidos: candidato.apellidos,
         fotoUrl: candidato.fotoUrl,
+        rolEspecifico: candidato.rolEspecifico ?? null,
       });
     }
 

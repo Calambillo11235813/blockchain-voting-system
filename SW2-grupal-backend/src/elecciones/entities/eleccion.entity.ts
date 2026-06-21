@@ -8,6 +8,7 @@ import {
 import { Administrador } from '../../administradores/entities/administrador.entity';
 import { EleccionCargo } from './eleccion-cargo.entity';
 import { Frente } from './frente.entity';
+import { EstadoEleccionEnum } from '../enums/estado-eleccion.enum';
 
 /**
  * Entidad que representa un proceso electoral (comicio) en la UAGRM.
@@ -37,6 +38,10 @@ export class Eleccion {
   /** Indica si la jornada de votación está actualmente abierta. */
   @Column('bool', { nullable: false, default: false })
   estaActiva: boolean;
+
+  /** Estado del ciclo de vida del proceso electoral. */
+  @Column('text', { nullable: false, default: EstadoEleccionEnum.EN_CONFIGURACION })
+  estado: EstadoEleccionEnum;
 
   // ─── Relaciones ──────────────────────────────────────────────────────────────
 

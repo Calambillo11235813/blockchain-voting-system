@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Eleccion } from '../entities/eleccion.entity';
+import { EstadoEleccionEnum } from '../enums/estado-eleccion.enum';
 import { ApiResponse, createApiResponse } from '../../compartido/respuesta';
 import { ConfiguracionService } from './configuracion.service';
 
@@ -20,6 +21,7 @@ export type AccionJornada = 'ABRIR' | 'CERRAR';
 export interface EstadoJornada {
   eleccionId: string;
   titulo: string;
+  estado: EstadoEleccionEnum;
   estaActiva: boolean;
   fecha: Date;
   accionEjecutada: AccionJornada;
@@ -77,14 +79,21 @@ export class JornadaService {
   async controlarEstadoJornada(
     eleccionId: string,
     accion: AccionJornada,
-  ): Promise<ApiResponse<EstadoJornada>> {
+  ): Promise<ApiResponse<Eleccion>> {
     const eleccion = await this.buscarEleccionPorIdOrThrow(eleccionId);
     const bypass =
       (await this.configuracionService.obtenerValor('BYPASS_ELECTION_TIME')) === true ||
       process.env.BYPASS_ELECTION_TIME === 'true';
 
+    const estadoActual = eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION;
+
     if (accion === 'ABRIR') {
-      // Validación 1: La jornada no debe estar ya abierta
+      if (estadoActual !== EstadoEleccionEnum.SELLADA) {
+        throw new BadRequestException(
+          'Solo se puede abrir una elección sellada.',
+        );
+      }
+
       if (eleccion.estaActiva) {
         throw new BadRequestException('La jornada ya está abierta.');
       }
@@ -93,14 +102,12 @@ export class JornadaService {
         const ahora = new Date();
         const fechaEleccion = this.parseElectionDate(eleccion.fecha as unknown as string | Date);
 
-        // Validación 2: La fecha de la elección debe coincidir con hoy
         if (!this.isSameDay(fechaEleccion, ahora)) {
           throw new ForbiddenException(
             'Solo se puede abrir la jornada el día de la elección.',
           );
         }
 
-        // Validación 3: La hora actual debe estar dentro del rango 08:00–16:00
         const horaActual = ahora.getHours();
         if (
           horaActual < JornadaService.VOTING_START_HOUR ||
@@ -112,30 +119,31 @@ export class JornadaService {
         }
       }
 
-      // Abrir jornada
       eleccion.estaActiva = true;
-      await this.eleccionRepository.save(eleccion);
+      eleccion.estado = EstadoEleccionEnum.ACTIVA;
+      const guardada = await this.eleccionRepository.save(eleccion);
 
       return createApiResponse(
         HttpStatus.OK,
-        this.buildEstadoJornada(eleccion, 'ABRIR'),
+        guardada,
         'Jornada electoral abierta correctamente.',
       );
     }
 
     if (accion === 'CERRAR') {
-      // Validación: La jornada debe estar activa para poder cerrarla
-      if (!eleccion.estaActiva) {
-        throw new BadRequestException('La jornada ya está cerrada.');
+      if (estadoActual !== EstadoEleccionEnum.ACTIVA || !eleccion.estaActiva) {
+        throw new BadRequestException(
+          'Solo se puede cerrar una jornada electoral activa.',
+        );
       }
 
-      // Cerrar jornada (puede forzarse en cualquier momento)
       eleccion.estaActiva = false;
-      await this.eleccionRepository.save(eleccion);
+      eleccion.estado = EstadoEleccionEnum.FINALIZADA;
+      const guardada = await this.eleccionRepository.save(eleccion);
 
       return createApiResponse(
         HttpStatus.OK,
-        this.buildEstadoJornada(eleccion, 'CERRAR'),
+        guardada,
         'Jornada electoral cerrada correctamente.',
       );
     }
@@ -197,6 +205,7 @@ export class JornadaService {
     return {
       eleccionId: eleccion.id,
       titulo: eleccion.titulo,
+      estado: eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION,
       estaActiva: eleccion.estaActiva,
       fecha: eleccion.fecha as unknown as Date,
       accionEjecutada,

@@ -9,7 +9,7 @@ const SIDEBAR_ITEMS = [
   { key: 'registry', label: 'Padrón Electoral', to: '/admin/padron', rolesRequeridos: ['ELECTORAL'] },
   { key: 'parties', label: 'Frente y Candidatos', to: '/admin/frentes-candidatos', rolesRequeridos: ['ELECTORAL'] },
   { key: 'ballot', label: 'Configuración de Papeleta', to: '/admin/configuracion-papeleta', rolesRequeridos: ['ELECTORAL'] },
-  { key: 'audit', label: 'Auditoría y Resultados', to: '/admin/auditoria-resultados', rolesRequeridos: ['ELECTORAL'] },
+  { key: 'consolidacion', label: 'Consolidación de Resultados', to: '/admin/consolidacion-resultados', rolesRequeridos: ['ELECTORAL'] },
   { key: 'estadisticas', label: 'Estadísticas en Vivo', to: '/admin/estadisticas-vivo', rolesRequeridos: ['ELECTORAL'] },
   { key: 'admins', label: 'Gestión de Admins', to: '/admin/admins', rolesRequeridos: ['SISTEMAS'] },
   { key: 'configuracion', label: 'Configuración del Sistema', to: '/admin/configuracion', rolesRequeridos: ['SISTEMAS'] },

@@ -13,6 +13,7 @@ import { ActualizarFrenteDto } from 'src/elecciones/dto/frente/actualizar-frente
 import { EleccionCargo } from 'src/elecciones/entities/eleccion-cargo.entity';
 import { Eleccion } from 'src/elecciones/entities/eleccion.entity';
 import { CandidatoService } from './candidato.service';
+import { EleccionEstadoService } from './eleccion-estado.service';
 
 /**
  * Servicio de aplicacion para la gestión de Frentes y Planillas de Candidatos.
@@ -28,6 +29,7 @@ export class FrenteService {
     private readonly eleccionCargoRepository: Repository<EleccionCargo>,
     private readonly dataSource: DataSource,
     private readonly candidatoService: CandidatoService,
+    private readonly eleccionEstadoService: EleccionEstadoService,
   ) {}
 
   /**
@@ -37,6 +39,7 @@ export class FrenteService {
     eleccionId: string,
     crearFrenteDto: CrearFrenteDto,
   ): Promise<ApiResponse<Frente>> {
+    await this.eleccionEstadoService.assertEnConfiguracion(eleccionId);
     const eleccion = await this.buscarEleccionPorIdOrThrow(eleccionId);
 
     const resultado = await this.dataSource.transaction(async (manager) => {
@@ -86,6 +89,7 @@ export class FrenteService {
    */
   async registrarFrente(eleccionCargoId: string, crearFrenteDto: CrearFrenteDto): Promise<ApiResponse<Frente>> {
     const eleccionCargo = await this.buscarEleccionCargoPorIdOrThrow(eleccionCargoId, true);
+    await this.eleccionEstadoService.assertEnConfiguracion(eleccionCargo.eleccion.id);
 
     const resultado = await this.dataSource.transaction(async (manager) => {
       const frente = manager.create(Frente, {
@@ -192,6 +196,7 @@ export class FrenteService {
     actualizarFrenteDto: ActualizarFrenteDto,
   ): Promise<ApiResponse<Frente>> {
     const frente = await this.buscarFrentePorIdOrThrow(frenteId);
+    await this.eleccionEstadoService.assertEnConfiguracion(frente.eleccion.id);
 
     frente.nombreFrente = actualizarFrenteDto.nombreFrente ?? frente.nombreFrente;
     frente.sigla = actualizarFrenteDto.sigla ?? frente.sigla;
@@ -204,6 +209,7 @@ export class FrenteService {
 
   async eliminarFrente(frenteId: string): Promise<ApiResponse<null>> {
     const frente = await this.buscarFrentePorIdOrThrow(frenteId);
+    await this.eleccionEstadoService.assertEnConfiguracion(frente.eleccion.id);
     await this.frenteRepository.remove(frente);
     return createApiResponse(HttpStatus.OK, null, 'Frente eliminado correctamente.');
   }

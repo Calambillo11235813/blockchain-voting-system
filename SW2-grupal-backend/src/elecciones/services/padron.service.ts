@@ -10,6 +10,7 @@ import { parsePadronExcelBuffer } from './padron/padron-excel.parser';
 import { FilaPadronNormalizada } from './padron/padron-excel.schemas';
 import { validateNoDuplicatesPadron } from './padron/padron-excel.validators';
 import { fusionarFilasDualRol } from './padron/padron-excel.merger';
+import { EleccionEstadoService } from './eleccion-estado.service';
 
 // ─── Interfaces de resultado ──────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export class PadronService {
     private readonly registroSufragioRepository: Repository<RegistroSufragio>,
 
     private readonly dataSource: DataSource,
+    private readonly eleccionEstadoService: EleccionEstadoService,
   ) { }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -75,6 +77,8 @@ export class PadronService {
     if (!eleccion) {
       throw new NotFoundException(`No se encontró la elección con id ${eleccionId}`);
     }
+
+    await this.eleccionEstadoService.assertEnConfiguracion(eleccionId);
 
     // ── 1. Parsing y validación estructural ───────────────────────────────
     const {

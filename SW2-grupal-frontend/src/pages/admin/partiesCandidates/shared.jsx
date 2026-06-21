@@ -29,6 +29,56 @@ export function Th({ children }) {
 }
 
 /**
+ * Aviso de elección en solo lectura (sellada o activa).
+ * @returns {import('react').JSX.Element}
+ */
+export function ReadOnlyElectionBanner() {
+  return (
+    <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+      🔒 Esta elección está sellada. Los frentes y candidatos son de solo lectura y no pueden
+      modificarse.
+    </p>
+  )
+}
+
+/**
+ * Botón de acción con tooltip nativo cuando está deshabilitado por elección sellada.
+ * @param {{
+ *  children: any,
+ *  disabled?: boolean,
+ *  readOnly?: boolean,
+ *  readOnlyTitle?: string,
+ *  className?: string,
+ *  onClick?: () => void,
+ *  type?: 'button' | 'submit',
+ * }} props
+ * @returns {import('react').JSX.Element}
+ */
+export function ActionButton({
+  children,
+  disabled = false,
+  readOnly = false,
+  readOnlyTitle = '',
+  className = '',
+  onClick,
+  type = 'button',
+}) {
+  const isDisabled = disabled || readOnly
+
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={isDisabled}
+      title={readOnly ? readOnlyTitle : undefined}
+      className={className}
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
  * Valida el formulario de registro de frentes.
  * @param {{ nombreFrente: string, sigla: string, eleccionId?: string }} form
  * @returns {string}

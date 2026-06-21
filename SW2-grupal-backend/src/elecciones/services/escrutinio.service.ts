@@ -12,11 +12,15 @@ import { Frente } from '../entities/frente.entity';
 import { RegistroSufragio } from '../entities/registro-sufragio.entity';
 import { PadronElectoral } from '../entities/padron-electoral.entity';
 import { EstamentoEnum } from '../../electores/entities/elector.entity';
+import { EstadoEleccionEnum } from '../enums/estado-eleccion.enum';
 import { ApiResponse, createApiResponse } from '../../compartido/respuesta';
 import { BlockchainService } from '../../blockchain/services/blockchain.service';
+import { PapeletaEligibilityService } from './papeleta-eligibility.service';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // ─── Interfaces de resultado ──────────────────────────────────────────────────
+
+export type VeredictoEscrutinio = 'GANADOR' | 'SEGUNDA_VUELTA' | 'SIN_DATOS';
 
 /** Resultado ponderado de un frente dentro del escrutinio paritario. */
 export interface ResultadoFrenteParitario {
@@ -24,37 +28,31 @@ export interface ResultadoFrenteParitario {
   nombreFrente: string;
   sigla: string;
   esOpcionGlobal: boolean;
-  /** Votos totales acreditados a este frente (fuente: blockchain). */
   votosBlockchain: number;
-  /** % del frente sobre el total de votos emitidos. */
   porcentajeTotal: number;
-  /**
-   * Score paritario docente (0-100).
-   * Calculado como: (votos_frente_estimados_docentes / total_docentes_habilitados) * 100.
-   * Estimación proporcional al no tener desglose por estamento en blockchain.
-   */
   scoreDocente: number;
-  /**
-   * Score paritario estudiante (0-100).
-   * Calculado como: (votos_frente_estimados_estudiantes / total_estudiantes_habilitados) * 100.
-   */
   scoreEstudiante: number;
-  /**
-   * Resultado ponderado final (ponderación paritaria 50 / 50).
-   * resultado_ponderado = (scoreDocente * 0.5) + (scoreEstudiante * 0.5).
-   */
   resultadoPonderado: number;
 }
 
-/** Resultado completo del escrutinio paritario de una elección. */
+/** Resultado completo del escrutinio paritario de una papeleta. */
 export interface ResultadoPapeletaEscrutinio {
   eleccionCargoId: string;
   cargoNombre: string;
   alcance: string;
   codFacultad: string | null;
   codCarrera: string | null;
+  facultadNombre: string | null;
+  carreraNombre: string | null;
+  totalHabilitadosDocentes: number;
+  totalHabilitadosEstudiantes: number;
+  totalSufragiosDocentes: number;
+  totalSufragiosEstudiantes: number;
+  totalSufragiosEmitidos: number;
   resultadosPorFrente: ResultadoFrenteParitario[];
   ganador: Pick<ResultadoFrenteParitario, 'frenteId' | 'nombreFrente' | 'sigla' | 'resultadoPonderado'> | null;
+  veredicto: VeredictoEscrutinio;
+  veredictoLabel: string;
 }
 
 /** Resultado completo del escrutinio paritario de una elección. */
@@ -62,25 +60,18 @@ export interface ResultadoEscrutinioParitario {
   eleccionId: string;
   tituloEleccion: string;
   fechaEleccion: Date;
-  /** Total de electores en el padrón (docentes + estudiantes). */
+  estado: EstadoEleccionEnum;
   totalHabilitados: number;
   totalHabilitadosDocentes: number;
   totalHabilitadosEstudiantes: number;
-  /** Total de sufragios emitidos (puede ser > electores si votaron varias papeletas). */
   totalSufragiosEmitidos: number;
-  /** Electores distintos que emitieron al menos un sufragio. */
   totalElectoresParticipantes: number;
   totalSufragiosDocentes: number;
   totalSufragiosEstudiantes: number;
-  /** Porcentaje de participación general. */
   participacionPorcentaje: number;
-  /** Resultados agrupados por papeleta/sub-elección. */
   resultadosPorPapeleta: ResultadoPapeletaEscrutinio[];
-  /** Resultados por frente con ponderación paritaria (aplanado, compatibilidad). */
   resultadosPorFrente: ResultadoFrenteParitario[];
-  /** Frente ganador (mayor resultado ponderado), null si no hay votos. */
   ganador: Pick<ResultadoFrenteParitario, 'frenteId' | 'nombreFrente' | 'sigla' | 'resultadoPonderado'> | null;
-  /** Indica si los votos por frente provienen de la blockchain o son simulados. */
   fuenteVotos: 'blockchain' | 'simulado';
 }
 
@@ -92,18 +83,14 @@ export interface ReporteConsolidacion {
   version: string;
 }
 
-// ─── Servicio ─────────────────────────────────────────────────────────────────
+interface MetricasPapeleta {
+  totalHabilitadosDocentes: number;
+  totalHabilitadosEstudiantes: number;
+  totalSufragiosDocentes: number;
+  totalSufragiosEstudiantes: number;
+  totalSufragiosEmitidos: number;
+}
 
-/**
- * Servicio dedicado al escrutinio automatizado y la generación de reportes
- * con ponderación paritaria (50 % docentes – 50 % estudiantes).
- *
- * PRINCIPIO DE DISEÑO — SECRETO DEL SUFRAGIO:
- * `RegistroSufragio` solo acredita el HECHO de haber votado (sin revelar por
- * quién). Los conteos por frente se obtienen desde la blockchain.
- * La ponderación paritaria se calcula estimando la participación por estamento
- * de forma proporcional, ya que la blockchain no segrega votos por estamento.
- */
 @Injectable()
 export class EscrutinioService {
   constructor(
@@ -123,33 +110,12 @@ export class EscrutinioService {
     private readonly padronElectoralRepository: Repository<PadronElectoral>,
 
     private readonly blockchainService: BlockchainService,
+    private readonly papeletaEligibilityService: PapeletaEligibilityService,
   ) {}
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  RF10 — ESCRUTINIO AUTOMATIZADO CON PONDERACIÓN PARITARIA
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * RF10 · Calcula los resultados de la elección con ponderación paritaria
-   * (50 % docentes / 50 % estudiantes).
-   *
-   * Flujo:
-   *  1. Valida existencia de la elección.
-   *  2. Valida que la jornada esté cerrada (excepto en modo BYPASS).
-   *  3. Obtiene totales de participación por estamento desde RegistroSufragio.
-   *  4. Obtiene frentes registrados para la elección.
-   *  5. Obtiene conteos de votos desde la blockchain y los mapea a frentes.
-   *  6. Aplica ponderación paritaria y determina el ganador.
-   *
-   * @param eleccionId UUID de la elección.
-   * @returns Resultado paritario completo.
-   * @throws NotFoundException si la elección no existe.
-   * @throws ForbiddenException si la jornada sigue abierta.
-   */
   async calcularResultadosParitarios(
     eleccionId: string,
   ): Promise<ApiResponse<ResultadoEscrutinioParitario>> {
-    // ── 1. Validar existencia ──────────────────────────────────────────────
     const eleccion = await this.eleccionRepository.findOne({
       where: { id: eleccionId },
     });
@@ -160,19 +126,20 @@ export class EscrutinioService {
       );
     }
 
-    // ── 2. Validar jornada cerrada ─────────────────────────────────────────
-    const bypass = process.env.BYPASS_ELECTION_TIME === 'true';
-    if (!bypass && eleccion.estaActiva) {
-      throw new ForbiddenException(
-        'No se puede calcular resultados con la jornada abierta.',
-      );
-    }
+    this.assertPuedeConsolidar(eleccion);
 
-    // ── 3. Participación por estamento (RegistroSufragio + Elector) ────────
     const sufragiosConElector = await this.registroSufragioRepository
       .createQueryBuilder('rs')
       .leftJoinAndSelect('rs.elector', 'elector')
+      .leftJoinAndSelect('rs.eleccionCargo', 'eleccionCargo')
       .where('rs.eleccion.id = :eleccionId', { eleccionId })
+      .getMany();
+
+    const padronConElector = await this.padronElectoralRepository
+      .createQueryBuilder('pe')
+      .leftJoinAndSelect('pe.elector', 'elector')
+      .where('pe.eleccion.id = :eleccionId', { eleccionId })
+      .andWhere('pe.estaHabilitado = true')
       .getMany();
 
     const totalSufragiosDocentes = sufragiosConElector.filter(
@@ -187,14 +154,6 @@ export class EscrutinioService {
     const totalElectoresParticipantes = new Set(
       sufragiosConElector.map((rs) => rs.elector?.id).filter(Boolean),
     ).size;
-
-    // ── 4. Electores habilitados por estamento (PadronElectoral) ──────────
-    const padronConElector = await this.padronElectoralRepository
-      .createQueryBuilder('pe')
-      .leftJoinAndSelect('pe.elector', 'elector')
-      .where('pe.eleccion.id = :eleccionId', { eleccionId })
-      .andWhere('pe.estaHabilitado = true')
-      .getMany();
 
     const totalHabilitadosDocentes = padronConElector.filter(
       (pe) => pe.elector?.estamento === EstamentoEnum.DOCENTE,
@@ -211,7 +170,6 @@ export class EscrutinioService {
         ? parseFloat(((totalElectoresParticipantes / totalHabilitados) * 100).toFixed(2))
         : 0;
 
-    // ── 5. Papeletas de la elección (DB) ───────────────────────────────────
     const eleccionCargos = await this.eleccionCargoRepository.find({
       where: { eleccion: { id: eleccionId } },
       relations: ['cargo', 'candidatos', 'candidatos.frente'],
@@ -223,6 +181,12 @@ export class EscrutinioService {
     const resultadosPorFrente: ResultadoFrenteParitario[] = [];
 
     for (const eleccionCargo of eleccionCargos) {
+      const metricas = this.calcularMetricasPorPapeleta(
+        eleccionCargo,
+        padronConElector,
+        sufragiosConElector,
+      );
+
       const frentesMap = new Map<string, typeof eleccionCargo.candidatos[0]['frente']>();
       for (const candidato of eleccionCargo.candidatos ?? []) {
         if (candidato.frente) {
@@ -246,18 +210,21 @@ export class EscrutinioService {
         }
       }
 
-      const totalVotosBlockchain = Array.from(votosBlockchainMap.values()).reduce((acc, v) => acc + v, 0);
+      const totalVotosBlockchain = Array.from(votosBlockchainMap.values()).reduce(
+        (acc, v) => acc + v,
+        0,
+      );
 
       const resultadosFrentePapeleta = frentesDB.map((frente) => {
         const resultado = this.calcularResultadoFrenteParitario(
           frente,
           votosBlockchainMap.get(frente.id) ?? 0,
           totalVotosBlockchain,
-          totalSufragiosDocentes,
-          totalSufragiosEstudiantes,
-          totalSufragiosEmitidos,
-          totalHabilitadosDocentes,
-          totalHabilitadosEstudiantes,
+          metricas.totalSufragiosDocentes,
+          metricas.totalSufragiosEstudiantes,
+          metricas.totalSufragiosEmitidos,
+          metricas.totalHabilitadosDocentes,
+          metricas.totalHabilitadosEstudiantes,
         );
         resultadosPorFrente.push(resultado);
         return resultado;
@@ -265,15 +232,9 @@ export class EscrutinioService {
 
       resultadosFrentePapeleta.sort((a, b) => b.resultadoPonderado - a.resultadoPonderado);
 
-      const ganadorPapeleta =
-        resultadosFrentePapeleta.length > 0 && resultadosFrentePapeleta[0].votosBlockchain > 0
-          ? {
-              frenteId: resultadosFrentePapeleta[0].frenteId,
-              nombreFrente: resultadosFrentePapeleta[0].nombreFrente,
-              sigla: resultadosFrentePapeleta[0].sigla,
-              resultadoPonderado: resultadosFrentePapeleta[0].resultadoPonderado,
-            }
-          : null;
+      const { veredicto, veredictoLabel, ganadorPapeleta } = this.determinarVeredicto(
+        resultadosFrentePapeleta,
+      );
 
       resultadosPorPapeleta.push({
         eleccionCargoId: eleccionCargo.id,
@@ -281,27 +242,32 @@ export class EscrutinioService {
         alcance: eleccionCargo.alcance,
         codFacultad: eleccionCargo.codFacultad,
         codCarrera: eleccionCargo.codCarrera,
+        facultadNombre: eleccionCargo.facultadNombre,
+        carreraNombre: eleccionCargo.carreraNombre,
+        totalHabilitadosDocentes: metricas.totalHabilitadosDocentes,
+        totalHabilitadosEstudiantes: metricas.totalHabilitadosEstudiantes,
+        totalSufragiosDocentes: metricas.totalSufragiosDocentes,
+        totalSufragiosEstudiantes: metricas.totalSufragiosEstudiantes,
+        totalSufragiosEmitidos: metricas.totalSufragiosEmitidos,
         resultadosPorFrente: resultadosFrentePapeleta,
         ganador: ganadorPapeleta,
+        veredicto,
+        veredictoLabel,
       });
     }
 
     resultadosPorFrente.sort((a, b) => b.resultadoPonderado - a.resultadoPonderado);
 
-    const ganador =
-      resultadosPorFrente.length > 0 && resultadosPorFrente[0].votosBlockchain > 0
-        ? {
-            frenteId: resultadosPorFrente[0].frenteId,
-            nombreFrente: resultadosPorFrente[0].nombreFrente,
-            sigla: resultadosPorFrente[0].sigla,
-            resultadoPonderado: resultadosPorFrente[0].resultadoPonderado,
-          }
-        : null;
+    const ganadorGlobal =
+      resultadosPorPapeleta.find((p) => p.ganador && p.veredicto === 'GANADOR')?.ganador ??
+      resultadosPorPapeleta.find((p) => p.ganador)?.ganador ??
+      null;
 
     const resultado: ResultadoEscrutinioParitario = {
       eleccionId: eleccion.id,
       tituloEleccion: eleccion.titulo,
       fechaEleccion: eleccion.fecha,
+      estado: eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION,
       totalHabilitados,
       totalHabilitadosDocentes,
       totalHabilitadosEstudiantes,
@@ -312,7 +278,7 @@ export class EscrutinioService {
       participacionPorcentaje,
       resultadosPorPapeleta,
       resultadosPorFrente,
-      ganador,
+      ganador: ganadorGlobal,
       fuenteVotos,
     };
 
@@ -323,32 +289,14 @@ export class EscrutinioService {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  RF18 — GENERAR REPORTE DE CONSOLIDACIÓN PARITARIA
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * RF18 · Genera el reporte oficial de consolidación paritaria de una elección.
-   *
-   * Invoca `calcularResultadosParitarios` y enriquece el resultado con
-   * metadatos de auditoría: fecha de generación y firma digital simulada
-   * (SHA-256 del eleccionId + timestamp como identificador de integridad).
-   *
-   * @param eleccionId UUID de la elección.
-   * @returns Reporte consolidado con firma y metadatos.
-   * @throws NotFoundException si la elección no existe.
-   * @throws ForbiddenException si la jornada sigue abierta.
-   */
   async generarReporteConsolidacion(
     eleccionId: string,
   ): Promise<ApiResponse<ReporteConsolidacion>> {
-    // Calcular resultados
     const escrutinioResponse = await this.calcularResultadosParitarios(eleccionId);
     const escrutinio = escrutinioResponse.data!;
 
     const fechaGeneracion = new Date().toISOString();
 
-    // Firma simulada: concatenación hasheada de los datos clave
     const firmaSimulada = this.generarFirmaSimulada(
       eleccionId,
       fechaGeneracion,
@@ -370,9 +318,130 @@ export class EscrutinioService {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  MÉTODOS PRIVADOS
-  // ═══════════════════════════════════════════════════════════════════════════
+  private assertPuedeConsolidar(eleccion: Eleccion): void {
+    const bypass = process.env.BYPASS_ELECTION_TIME === 'true';
+    if (bypass) return;
+
+    if (eleccion.estaActiva) {
+      throw new ForbiddenException(
+        'No se puede consolidar resultados con la jornada abierta.',
+      );
+    }
+
+    const estado = eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION;
+    const esFinalizada =
+      estado === EstadoEleccionEnum.FINALIZADA ||
+      (estado === EstadoEleccionEnum.ACTIVA && !eleccion.estaActiva);
+
+    if (!esFinalizada) {
+      throw new ForbiddenException(
+        'La elección debe estar finalizada para generar el acta de consolidación.',
+      );
+    }
+  }
+
+  private calcularMetricasPorPapeleta(
+    eleccionCargo: EleccionCargo,
+    padronConElector: PadronElectoral[],
+    sufragiosConElector: RegistroSufragio[],
+  ): MetricasPapeleta {
+    let totalHabilitadosDocentes = 0;
+    let totalHabilitadosEstudiantes = 0;
+
+    for (const entrada of padronConElector) {
+      const elector = entrada.elector;
+      if (!elector) continue;
+
+      if (
+        !this.papeletaEligibilityService.esPapeletaAplicable(
+          elector,
+          eleccionCargo,
+          entrada,
+        )
+      ) {
+        continue;
+      }
+
+      if (elector.estamento === EstamentoEnum.DOCENTE) {
+        totalHabilitadosDocentes += 1;
+      } else if (elector.estamento === EstamentoEnum.ESTUDIANTE) {
+        totalHabilitadosEstudiantes += 1;
+      }
+    }
+
+    const sufragiosPapeleta = sufragiosConElector.filter(
+      (rs) => rs.eleccionCargo?.id === eleccionCargo.id,
+    );
+
+    const totalSufragiosDocentes = sufragiosPapeleta.filter(
+      (rs) => rs.elector?.estamento === EstamentoEnum.DOCENTE,
+    ).length;
+
+    const totalSufragiosEstudiantes = sufragiosPapeleta.filter(
+      (rs) => rs.elector?.estamento === EstamentoEnum.ESTUDIANTE,
+    ).length;
+
+    return {
+      totalHabilitadosDocentes,
+      totalHabilitadosEstudiantes,
+      totalSufragiosDocentes,
+      totalSufragiosEstudiantes,
+      totalSufragiosEmitidos: sufragiosPapeleta.length,
+    };
+  }
+
+  private determinarVeredicto(resultadosFrente: ResultadoFrenteParitario[]): {
+    veredicto: VeredictoEscrutinio;
+    veredictoLabel: string;
+    ganadorPapeleta: Pick<
+      ResultadoFrenteParitario,
+      'frenteId' | 'nombreFrente' | 'sigla' | 'resultadoPonderado'
+    > | null;
+  } {
+    if (!resultadosFrente.length || resultadosFrente[0].votosBlockchain === 0) {
+      return {
+        veredicto: 'SIN_DATOS',
+        veredictoLabel: 'Sin votos registrados',
+        ganadorPapeleta: null,
+      };
+    }
+
+    const lider = resultadosFrente[0];
+    const segundo = resultadosFrente[1];
+    const empate =
+      segundo != null &&
+      segundo.resultadoPonderado === lider.resultadoPonderado &&
+      segundo.votosBlockchain > 0;
+
+    const ganadorBase = {
+      frenteId: lider.frenteId,
+      nombreFrente: lider.nombreFrente,
+      sigla: lider.sigla,
+      resultadoPonderado: lider.resultadoPonderado,
+    };
+
+    if (empate) {
+      return {
+        veredicto: 'SEGUNDA_VUELTA',
+        veredictoLabel: 'Segunda Vuelta',
+        ganadorPapeleta: ganadorBase,
+      };
+    }
+
+    if (lider.resultadoPonderado > 50) {
+      return {
+        veredicto: 'GANADOR',
+        veredictoLabel: 'Ganador',
+        ganadorPapeleta: ganadorBase,
+      };
+    }
+
+    return {
+      veredicto: 'SEGUNDA_VUELTA',
+      veredictoLabel: 'Segunda Vuelta',
+      ganadorPapeleta: ganadorBase,
+    };
+  }
 
   private calcularResultadoFrenteParitario(
     frente: Frente,
@@ -430,17 +499,6 @@ export class EscrutinioService {
     };
   }
 
-  /**
-   * Genera una firma digital simulada usando una cadena de texto que resume
-   * los datos clave del escrutinio. No reemplaza una firma criptográfica real;
-   * sirve como identificador de integridad en entornos de demostración.
-   *
-   * @param eleccionId UUID de la elección.
-   * @param timestamp  ISO timestamp de generación.
-   * @param totalVotos Total de sufragios emitidos.
-   * @param ganadorId  UUID o constante del frente ganador.
-   * @returns Cadena hexadecimal de 64 caracteres (hash simulado).
-   */
   private generarFirmaSimulada(
     eleccionId: string,
     timestamp: string,
@@ -448,14 +506,12 @@ export class EscrutinioService {
     ganadorId: string,
   ): string {
     const payload = `${eleccionId}|${timestamp}|${totalVotos}|${ganadorId}`;
-    // Firma deterministamente reproducible (sin dependencia de crypto para portabilidad)
     let hash = 0;
     for (let i = 0; i < payload.length; i++) {
       const char = payload.charCodeAt(i);
       hash = (hash << 5) - hash + char;
-      hash |= 0; // Convertir a entero de 32 bits
+      hash |= 0;
     }
-    // Extender a 64 caracteres simulando un hash SHA-256
     const base = Math.abs(hash).toString(16).padStart(8, '0');
     return Array.from({ length: 8 }, (_, i) => {
       const segment = (Math.abs(hash) * (i + 1) * 31337).toString(16).padStart(8, '0');
@@ -463,58 +519,56 @@ export class EscrutinioService {
     }).join('') + base;
   }
 
-  /**
-   * Genera el Acta de Consolidación Paritaria en PDF.
-   */
   async generarActaPDF(eleccionId: string): Promise<Buffer> {
     const reporteResponse = await this.generarReporteConsolidacion(eleccionId);
     const reporteInfo = reporteResponse.data!.reporte;
     const firmaSimulada = reporteResponse.data!.firmaSimulada;
     const fechaGeneracion = reporteResponse.data!.fechaGeneracion;
-    
+
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595.276, 841.890]); // Tamaño A4
+    let page = pdfDoc.addPage([595.276, 841.890]);
     const { width, height } = page.getSize();
 
-    // Paleta de colores
-    const colorAzulInstitucional = rgb(0.08, 0.22, 0.44); // #143870
+    const colorAzulInstitucional = rgb(0.08, 0.22, 0.44);
     const colorBlanco = rgb(1, 1, 1);
     const colorGrisFondo = rgb(0.95, 0.95, 0.95);
     const colorGrisBorde = rgb(0.8, 0.8, 0.8);
     const colorGrisTexto = rgb(0.3, 0.3, 0.3);
     const colorVerdeGanador = rgb(0.1, 0.5, 0.2);
+    const colorAmbar = rgb(0.85, 0.55, 0.1);
 
     const fontHelvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontHelveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // 1. Cabecera Oficial
-    page.drawRectangle({
-      x: 0,
-      y: height - 80,
-      width: width,
-      height: 80,
-      color: colorAzulInstitucional,
-    });
+    let currentY = height - 40;
 
-    page.drawText('SISTEMA ELECTORAL UNIVERSITARIO', {
-      x: 40,
-      y: height - 35,
-      size: 16,
-      font: fontHelveticaBold,
-      color: colorBlanco,
-    });
+    const drawHeader = () => {
+      page.drawRectangle({
+        x: 0,
+        y: height - 80,
+        width,
+        height: 80,
+        color: colorAzulInstitucional,
+      });
+      page.drawText('SISTEMA ELECTORAL UNIVERSITARIO', {
+        x: 40,
+        y: height - 35,
+        size: 16,
+        font: fontHelveticaBold,
+        color: colorBlanco,
+      });
+      page.drawText('ACTA OFICIAL DE ESCRUTINIO Y CONSOLIDACIÓN PARITARIA', {
+        x: 40,
+        y: height - 55,
+        size: 11,
+        font: fontHelvetica,
+        color: colorBlanco,
+      });
+      currentY = height - 110;
+    };
 
-    page.drawText('ACTA OFICIAL DE ESCRUTINIO Y CONSOLIDACIÓN PARITARIA', {
-      x: 40,
-      y: height - 55,
-      size: 11,
-      font: fontHelvetica,
-      color: colorBlanco,
-    });
+    drawHeader();
 
-    // 2. Información de la Elección (Recuadro Gris)
-    let currentY = height - 110;
-    
     page.drawRectangle({
       x: 40,
       y: currentY - 80,
@@ -534,104 +588,94 @@ export class EscrutinioService {
     });
 
     const d = new Date(reporteInfo.fechaEleccion);
-    const fechaFormat = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')}/${d.getFullYear()}`;
-    page.drawText(`Fecha del proceso: ${fechaFormat}`, { x: 50, y: currentY - 45, size: 10, font: fontHelvetica, color: colorGrisTexto });
-    
-    page.drawText(`Participación Estudiantil: ${reporteInfo.totalSufragiosEstudiantes} / ${reporteInfo.totalHabilitadosEstudiantes}`, { x: 320, y: currentY - 25, size: 10, font: fontHelvetica, color: colorGrisTexto });
-    page.drawText(`Participación Docente: ${reporteInfo.totalSufragiosDocentes} / ${reporteInfo.totalHabilitadosDocentes}`, { x: 320, y: currentY - 45, size: 10, font: fontHelvetica, color: colorGrisTexto });
-    page.drawText(`Participación Global: ${reporteInfo.participacionPorcentaje}%`, { x: 320, y: currentY - 65, size: 10, font: fontHelveticaBold, color: colorAzulInstitucional });
+    const fechaFormat = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+    page.drawText(`Fecha del proceso: ${fechaFormat}`, {
+      x: 50,
+      y: currentY - 45,
+      size: 10,
+      font: fontHelvetica,
+      color: colorGrisTexto,
+    });
+    page.drawText(`Participación global: ${reporteInfo.participacionPorcentaje}%`, {
+      x: 320,
+      y: currentY - 25,
+      size: 10,
+      font: fontHelveticaBold,
+      color: colorAzulInstitucional,
+    });
+    page.drawText(`Sufragios emitidos: ${reporteInfo.totalSufragiosEmitidos}`, {
+      x: 320,
+      y: currentY - 45,
+      size: 10,
+      font: fontHelvetica,
+      color: colorGrisTexto,
+    });
 
     currentY -= 120;
 
-    // 3. Tabla de Resultados Ponderados
-    page.drawText('RESULTADOS OFICIALES POR FRENTE:', { x: 40, y: currentY, size: 12, font: fontHelveticaBold, color: colorAzulInstitucional });
-    currentY -= 15;
-
-    // Header Tabla
-    page.drawRectangle({
-      x: 40,
-      y: currentY - 20,
-      width: width - 80,
-      height: 20,
-      color: colorAzulInstitucional,
-    });
-    
-    page.drawText('FRENTE / SIGLA', { x: 50, y: currentY - 14, size: 10, font: fontHelveticaBold, color: colorBlanco });
-    page.drawText('VOTOS REALES', { x: 280, y: currentY - 14, size: 10, font: fontHelveticaBold, color: colorBlanco });
-    page.drawText('PUNTAJE FINAL', { x: 400, y: currentY - 14, size: 10, font: fontHelveticaBold, color: colorBlanco });
-
-    currentY -= 20;
-
-    // Unificar frentes para evitar duplicados en el PDF y reordenar por puntaje
-    const frentesUnicos = new Map<string, any>();
-    for (const f of reporteInfo.resultadosPorFrente) {
-      const key = f.nombreFrente.toLowerCase().trim() || f.frenteId;
-      if (!frentesUnicos.has(key)) {
-        frentesUnicos.set(key, { ...f });
-      } else {
-        const existente = frentesUnicos.get(key);
-        existente.resultadoPonderado += f.resultadoPonderado;
-        existente.votosBlockchain += f.votosBlockchain;
+    for (const papeleta of reporteInfo.resultadosPorPapeleta) {
+      if (currentY < 180) {
+        page = pdfDoc.addPage([595.276, 841.890]);
+        currentY = height - 60;
       }
-    }
-    const frentesArray = Array.from(frentesUnicos.values()).sort((a, b) => b.resultadoPonderado - a.resultadoPonderado);
 
-    // Filas Tabla
-    for (const f of frentesArray) {
-      currentY -= 25;
-      page.drawText(`${f.nombreFrente} (${f.sigla})`, { x: 50, y: currentY + 8, size: 10, font: fontHelvetica, color: colorGrisTexto });
-      page.drawText(`${Math.round(f.votosBlockchain)} votos`, { x: 280, y: currentY + 8, size: 10, font: fontHelvetica, color: colorGrisTexto });
-      page.drawText(`${f.resultadoPonderado.toFixed(2)} pts`, { x: 400, y: currentY + 8, size: 11, font: fontHelveticaBold, color: colorAzulInstitucional });
-      
-      // Linea separadora inferior de la fila
-      page.drawLine({
-        start: { x: 40, y: currentY },
-        end: { x: width - 40, y: currentY },
-        thickness: 0.5,
-        color: colorGrisBorde,
-      });
-    }
-
-    // 4. Declaración del Ganador
-    currentY -= 50;
-    if (frentesArray.length > 0 && frentesArray[0].resultadoPonderado > 0) {
-      // Tomamos el ganador consolidado real de frentesArray
-      const ganadorUnificado = frentesArray[0];
-      
-      page.drawRectangle({
-        x: 40,
-        y: currentY - 40,
-        width: width - 80,
-        height: 40,
-        color: colorVerdeGanador,
-      });
-
-      page.drawText(`FRENTE GANADOR: ${ganadorUnificado.nombreFrente}`, {
-        x: 50,
-        y: currentY - 20,
-        size: 12,
-        font: fontHelveticaBold,
-        color: colorBlanco,
-      });
-
-      page.drawText(`con ${ganadorUnificado.resultadoPonderado.toFixed(2)} puntos ponderados`, {
-        x: 50,
-        y: currentY - 32,
-        size: 10,
-        font: fontHelvetica,
-        color: colorBlanco,
-      });
-    } else {
-      page.drawText('No se determinó un ganador (Empate o cero votos).', {
+      const tituloPapeleta = this.formatTituloPapeleta(papeleta);
+      page.drawText(tituloPapeleta, {
         x: 40,
         y: currentY,
         size: 12,
         font: fontHelveticaBold,
-        color: colorGrisTexto,
+        color: colorAzulInstitucional,
       });
+      currentY -= 18;
+
+      page.drawText(
+        `Docentes: ${papeleta.totalSufragiosDocentes}/${papeleta.totalHabilitadosDocentes} · Estudiantes: ${papeleta.totalSufragiosEstudiantes}/${papeleta.totalHabilitadosEstudiantes}`,
+        { x: 40, y: currentY, size: 9, font: fontHelvetica, color: colorGrisTexto },
+      );
+      currentY -= 22;
+
+      for (const frente of papeleta.resultadosPorFrente) {
+        if (currentY < 120) {
+          page = pdfDoc.addPage([595.276, 841.890]);
+          currentY = height - 60;
+        }
+        page.drawText(
+          `${frente.nombreFrente} (${frente.sigla}): ${frente.votosBlockchain} votos · ${frente.resultadoPonderado.toFixed(2)} pts`,
+          { x: 50, y: currentY, size: 9, font: fontHelvetica, color: colorGrisTexto },
+        );
+        currentY -= 14;
+      }
+
+      const colorVeredicto =
+        papeleta.veredicto === 'GANADOR' ? colorVerdeGanador : colorAmbar;
+      const textoVeredicto =
+        papeleta.veredicto === 'GANADOR' && papeleta.ganador
+          ? `GANADOR: ${papeleta.ganador.nombreFrente} (${papeleta.ganador.resultadoPonderado.toFixed(2)} pts)`
+          : papeleta.veredictoLabel.toUpperCase();
+
+      page.drawRectangle({
+        x: 40,
+        y: currentY - 28,
+        width: width - 80,
+        height: 28,
+        color: papeleta.veredicto === 'SIN_DATOS' ? colorGrisFondo : colorVeredicto,
+      });
+      page.drawText(textoVeredicto, {
+        x: 50,
+        y: currentY - 18,
+        size: 10,
+        font: fontHelveticaBold,
+        color: papeleta.veredicto === 'SIN_DATOS' ? colorGrisTexto : colorBlanco,
+      });
+      currentY -= 45;
     }
 
-    // 5. Pie de Página (Auditoría Blockchain)
+    if (currentY < 100) {
+      page = pdfDoc.addPage([595.276, 841.890]);
+      currentY = height - 80;
+    }
+
     const yFooter = 70;
     page.drawLine({
       start: { x: 40, y: yFooter + 20 },
@@ -640,17 +684,17 @@ export class EscrutinioService {
       color: colorAzulInstitucional,
     });
 
-    page.drawText('Documento generado automáticamente y respaldado por la inmutabilidad de la red Blockchain.', {
+    page.drawText('Documento generado automáticamente por el Sistema Electoral Universitario.', {
       x: 40,
       y: yFooter,
       size: 8,
       font: fontHelvetica,
       color: colorGrisTexto,
     });
-    
+
     const fechaGenObj = new Date(fechaGeneracion);
-    const dateStr = `${fechaGenObj.getDate().toString().padStart(2, '0')}/${(fechaGenObj.getMonth()+1).toString().padStart(2, '0')}/${fechaGenObj.getFullYear()}`;
-    const timeStr = `${fechaGenObj.getHours().toString().padStart(2, '0')}:${fechaGenObj.getMinutes().toString().padStart(2, '0')}:${fechaGenObj.getSeconds().toString().padStart(2, '0')}`;
+    const dateStr = `${fechaGenObj.getDate().toString().padStart(2, '0')}/${(fechaGenObj.getMonth() + 1).toString().padStart(2, '0')}/${fechaGenObj.getFullYear()}`;
+    const timeStr = `${fechaGenObj.getHours().toString().padStart(2, '0')}:${fechaGenObj.getMinutes().toString().padStart(2, '0')}`;
 
     page.drawText(`Fecha de Emisión: ${dateStr} ${timeStr}`, {
       x: 40,
@@ -660,23 +704,26 @@ export class EscrutinioService {
       color: colorGrisTexto,
     });
 
-    page.drawText(`Hash de Integridad (SHA-256):`, {
+    page.drawText(`Hash de Integridad: ${firmaSimulada.slice(0, 48)}...`, {
       x: 40,
       y: yFooter - 26,
-      size: 8,
-      font: fontHelveticaBold,
-      color: colorGrisTexto,
-    });
-    
-    page.drawText(`${firmaSimulada}`, {
-      x: 180,
-      y: yFooter - 26,
-      size: 8,
+      size: 7,
       font: fontHelvetica,
       color: colorAzulInstitucional,
     });
 
     const pdfBytes = await pdfDoc.save();
     return Buffer.from(pdfBytes);
+  }
+
+  private formatTituloPapeleta(papeleta: ResultadoPapeletaEscrutinio): string {
+    const nombre = papeleta.cargoNombre;
+    if (papeleta.alcance === 'GLOBAL') return `PAPELETA: ${nombre}`;
+    if (papeleta.alcance === 'FACULTAD') {
+      return `PAPELETA: ${nombre} — ${papeleta.facultadNombre ?? papeleta.codFacultad ?? ''}`;
+    }
+    const carrera = papeleta.carreraNombre ?? papeleta.codCarrera ?? '';
+    const facultad = papeleta.facultadNombre ?? papeleta.codFacultad ?? '';
+    return `PAPELETA: ${nombre} — ${facultad} / ${carrera}`;
   }
 }

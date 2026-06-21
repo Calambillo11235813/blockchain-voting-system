@@ -5,6 +5,7 @@ import { Eleccion } from '../entities/eleccion.entity';
 import { ApiResponse, createApiResponse } from 'src/compartido/respuesta';
 import { CrearEleccionDto } from '../dto/eleccion/crear-eleccion.dto';
 import { ActualizarEleccionDto } from '../dto/eleccion/actualizar-eleccion.dto';
+import { EstadoEleccionEnum } from '../enums/estado-eleccion.enum';
 
 /**
  * Servicio del dominio de elecciones facultativas.
@@ -38,7 +39,8 @@ export class EleccionesLegacyService {
       gestion: crearEleccionDto.gestion,
       fecha,
       restriccionAlfabeticaActiva: crearEleccionDto.restriccionAlfabeticaActiva ?? true,
-      estaActiva: crearEleccionDto.estaActiva,
+      estaActiva: false,
+      estado: EstadoEleccionEnum.EN_CONFIGURACION,
     });
 
     const guardada = await this.eleccionRepository.save(eleccion);
@@ -81,6 +83,25 @@ export class EleccionesLegacyService {
     actualizarEleccionDto: ActualizarEleccionDto,
   ): Promise<ApiResponse<Eleccion>> {
     const eleccion = await this.buscarEleccionPorIdOrThrow(eleccionId);
+    const estado = eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION;
+
+    if (
+      estado === EstadoEleccionEnum.ACTIVA ||
+      estado === EstadoEleccionEnum.FINALIZADA
+    ) {
+      throw new ForbiddenException(
+        'No se puede editar una elección con jornada activa o finalizada.',
+      );
+    }
+
+    if (
+      actualizarEleccionDto.estaActiva !== undefined &&
+      actualizarEleccionDto.estaActiva !== eleccion.estaActiva
+    ) {
+      throw new BadRequestException(
+        'El estado de la jornada solo puede cambiarse mediante abrir/cerrar votación.',
+      );
+    }
 
     const nuevaFecha = actualizarEleccionDto.fecha
       ? this.parseElectionDate(actualizarEleccionDto.fecha)
@@ -94,7 +115,6 @@ export class EleccionesLegacyService {
     eleccion.fecha = nuevaFecha;
     eleccion.restriccionAlfabeticaActiva =
       actualizarEleccionDto.restriccionAlfabeticaActiva ?? eleccion.restriccionAlfabeticaActiva;
-    eleccion.estaActiva = actualizarEleccionDto.estaActiva ?? eleccion.estaActiva;
 
     const actualizada = await this.eleccionRepository.save(eleccion);
     return createApiResponse(HttpStatus.OK, actualizada, 'Eleccion actualizada correctamente.');
@@ -108,6 +128,17 @@ export class EleccionesLegacyService {
    */
   async eliminarEleccion(eleccionId: string): Promise<ApiResponse<null>> {
     const eleccion = await this.buscarEleccionPorIdOrThrow(eleccionId);
+    const estado = eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION;
+
+    if (
+      estado === EstadoEleccionEnum.ACTIVA ||
+      estado === EstadoEleccionEnum.FINALIZADA
+    ) {
+      throw new ForbiddenException(
+        'No se puede eliminar una elección con jornada activa o finalizada.',
+      );
+    }
+
     await this.eleccionRepository.remove(eleccion);
     return createApiResponse(HttpStatus.OK, null, 'Eleccion eliminada correctamente.');
   }
@@ -174,6 +205,51 @@ export class EleccionesLegacyService {
     eleccion.restriccionAlfabeticaActiva = !eleccion.restriccionAlfabeticaActiva;
     const actualizada = await this.eleccionRepository.save(eleccion);
     return createApiResponse(HttpStatus.OK, actualizada, 'Restriccion alfabetica actualizada correctamente.');
+  }
+
+  /**
+   * Sella una elección: cierre legal de listas antes del despliegue del contrato.
+   * @param eleccionId Identificador UUID de la eleccion.
+   */
+  async sellarEleccion(eleccionId: string): Promise<ApiResponse<Eleccion>> {
+    const eleccion = await this.eleccionRepository.findOne({
+      where: { id: eleccionId },
+      relations: {
+        frentes: true,
+        eleccionCargos: { candidatos: true },
+      },
+    });
+
+    if (!eleccion) {
+      throw new NotFoundException(`No se encontro la eleccion con id ${eleccionId}`);
+    }
+
+    if (eleccion.estado !== EstadoEleccionEnum.EN_CONFIGURACION) {
+      throw new BadRequestException(
+        'Solo se pueden sellar elecciones que se encuentren en estado EN_CONFIGURACION.',
+      );
+    }
+
+    const totalFrentes = eleccion.frentes?.length ?? 0;
+    const totalCandidatos = (eleccion.eleccionCargos ?? []).reduce(
+      (acc, ec) => acc + (ec.candidatos?.length ?? 0),
+      0,
+    );
+
+    if (totalFrentes === 0 && totalCandidatos === 0) {
+      throw new BadRequestException(
+        'Debe registrar al menos un frente o candidato antes de sellar la elección.',
+      );
+    }
+
+    eleccion.estado = EstadoEleccionEnum.SELLADA;
+    const sellada = await this.eleccionRepository.save(eleccion);
+
+    return createApiResponse(
+      HttpStatus.OK,
+      sellada,
+      'Elección sellada correctamente. Las listas quedaron bloqueadas para su despliegue en blockchain.',
+    );
   }
 
   /**

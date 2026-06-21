@@ -19,6 +19,8 @@ export class CrearEleccionDto {
   @IsBoolean()
   restriccionAlfabeticaActiva?: boolean;
 
+  /** Ignorado en creación: la jornada solo se abre vía PATCH /abrir. */
+  @IsOptional()
   @IsBoolean()
-  estaActiva: boolean;
+  estaActiva?: boolean;
 }
