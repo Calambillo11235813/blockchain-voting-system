@@ -15,6 +15,13 @@ describe('padron-name-splitter', () => {
       expect(result.nombreAmbiguo).toBe(false);
     });
 
+    it('divide tres tokens como nombre + dos apellidos (formato UAGRM)', () => {
+      const result = splitNombreCompleto('ABIGAÍL GRANADOS DONAIRE');
+      expect(result.nombre).toBe('ABIGAÍL');
+      expect(result.apellido).toBe('GRANADOS DONAIRE');
+      expect(result.nombreAmbiguo).toBe(false);
+    });
+
     it('divide nombre completo boliviano típico (4+ tokens)', () => {
       const result = splitNombreCompleto('PEREZ LOPEZ JUAN CARLOS');
       expect(result.nombre).toBe('JUAN CARLOS');

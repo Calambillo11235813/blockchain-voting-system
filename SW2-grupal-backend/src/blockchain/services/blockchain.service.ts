@@ -15,6 +15,7 @@ interface VotacionContract {
     estamento: number,
   ): Promise<ethers.ContractTransactionResponse>;
   configurarEleccionActiva(eleccionHash: string, activa: boolean): Promise<ethers.ContractTransactionResponse>;
+  eleccionActiva(eleccionHash: string): Promise<boolean>;
   obtenerVotos(eleccionHash: string, candidatoHash: string): Promise<bigint>;
   obtenerVotosEstudiantes(eleccionHash: string, candidatoHash: string): Promise<bigint>;
   obtenerVotosDocentes(eleccionHash: string, candidatoHash: string): Promise<bigint>;
@@ -152,14 +153,59 @@ export class BlockchainService implements OnModuleInit {
     activa: boolean,
     privateKey: string,
   ): Promise<string> {
-    const wallet = this.createWallet(privateKey);
-    const contractInstance = await this.getContract();
-    const contractWithSigner = contractInstance.connect(wallet);
-    const eleccionHash = this.hashUuid(papeletaId);
+    const hashes = await this.configurarPapeletasActivasEnLote([papeletaId], activa, privateKey);
+    return hashes[0] ?? '';
+  }
 
-    const tx = await contractWithSigner.configurarEleccionActiva(eleccionHash, activa);
-    await tx.wait();
-    return tx.hash;
+  /**
+   * Consulta si una papeleta está activa on-chain.
+   */
+  async esPapeletaActivaOnChain(papeletaId: string): Promise<boolean> {
+    const contractInstance = await this.getContract();
+    const eleccionHash = this.hashUuid(papeletaId);
+    return contractInstance.eleccionActiva(eleccionHash);
+  }
+
+  /**
+   * Activa o cierra varias papeletas en secuencia usando una sola wallet y nonce explícito.
+   * Evita errores "Nonce too low" en Hardhat al no crear wallets nuevas por transacción.
+   */
+  async configurarPapeletasActivasEnLote(
+    papeletaIds: string[],
+    activa: boolean,
+    privateKey: string,
+  ): Promise<string[]> {
+    if (papeletaIds.length === 0) {
+      return [];
+    }
+
+    const wallet = this.createWallet(privateKey);
+    const provider = this.getProvider();
+    const address = await this.getActiveContractAddress();
+    const abi = (VotacionAbi as { abi?: unknown }).abi ?? VotacionAbi;
+    const contract = new ethers.Contract(address, abi as ethers.InterfaceAbi, wallet);
+    const contractReadOnly = await this.getContract();
+
+    let nonce = await provider.getTransactionCount(wallet.address, 'pending');
+    const txHashes: string[] = [];
+
+    for (const papeletaId of papeletaIds) {
+      const eleccionHash = this.hashUuid(papeletaId);
+
+      if (activa) {
+        const yaActiva = await contractReadOnly.eleccionActiva(eleccionHash);
+        if (yaActiva) {
+          continue;
+        }
+      }
+
+      const tx = await contract.configurarEleccionActiva(eleccionHash, activa, { nonce });
+      await tx.wait();
+      txHashes.push(tx.hash);
+      nonce += 1;
+    }
+
+    return txHashes;
   }
 
   /**

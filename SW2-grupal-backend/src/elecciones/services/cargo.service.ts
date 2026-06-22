@@ -146,9 +146,9 @@ export class CargoService {
 
   private inferirTipoCargo(nombre: string): TipoCargoEnum {
     const upper = nombre.trim().toUpperCase();
+    if (upper.includes('DIRECTOR')) return TipoCargoEnum.DIRECTOR_CARRERA;
     if (upper.includes('RECTOR')) return TipoCargoEnum.RECTOR;
     if (upper.includes('DECANO')) return TipoCargoEnum.DECANO;
-    if (upper.includes('DIRECTOR')) return TipoCargoEnum.DIRECTOR_CARRERA;
     return TipoCargoEnum.OTRO;
   }
 

@@ -144,31 +144,35 @@ export default function BallotStep({
 
               <div className={`mx-4 border-t ${isSelected ? 'border-yellow-200' : 'border-slate-100'}`} />
 
-              <div className="space-y-3 p-4">
-                {candidate ? (
-                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">
-                    {candidate.fotoUrl ? (
-                      <img
-                        src={candidate.fotoUrl}
-                        alt={candidate.fullName}
-                        className="mx-auto h-32 w-32 rounded-2xl border border-slate-200 object-cover"
-                      />
-                    ) : (
-                      <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-                        <span className="text-2xl font-black text-slate-300">
-                          {candidate.nombres?.charAt(0) || '?'}
-                        </span>
+              <div className="p-4">
+                {front.candidates && front.candidates.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {front.candidates.map((cand, idx) => (
+                      <div key={cand.id || idx} className="rounded-lg border border-slate-200 bg-white p-3 text-center flex flex-col items-center">
+                        {cand.fotoUrl ? (
+                          <img
+                            src={cand.fotoUrl}
+                            alt={cand.fullName}
+                            className="mx-auto h-40 w-40 rounded-2xl border border-slate-200 object-cover"
+                          />
+                        ) : (
+                          <div className="mx-auto flex h-40 w-40 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
+                            <span className="text-3xl font-black text-slate-300">
+                              {cand.nombres?.charAt(0) || '?'}
+                            </span>
+                          </div>
+                        )}
+                        <p className="mt-3 text-sm font-semibold text-slate-900 leading-tight">
+                          {cand.fullName || cand.nombres}
+                        </p>
+                        {cand.rolEspecifico && (
+                          <p className="mt-1 text-xs uppercase tracking-wider text-slate-500 font-bold">{cand.rolEspecifico}</p>
+                        )}
                       </div>
-                    )}
-                    <p className="mt-3 text-sm font-semibold text-slate-900">
-                      {candidate.fullName || candidate.nombres}
-                    </p>
-                    {candidate.rolEspecifico && (
-                      <p className="mt-1 text-xs text-slate-500">{candidate.rolEspecifico}</p>
-                    )}
+                    ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-500">Sin candidato registrado.</p>
+                  <p className="text-sm text-slate-500 text-center">Sin candidatos registrados.</p>
                 )}
               </div>
 

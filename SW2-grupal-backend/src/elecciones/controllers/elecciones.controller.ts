@@ -61,6 +61,23 @@ export class EleccionesController {
   }
 
   /**
+   * [DEV] Sincroniza on-chain las papeletas de la elección ACTIVA tras redeploy/reinicio de Hardhat.
+   * Sin autenticación — solo para entorno local de desarrollo.
+   */
+  @Get('forzar-sync-blockchain')
+  async forzarSyncBlockchain(): Promise<{
+    message: string;
+    papeletas: number;
+    papeletasSincronizadas: number;
+    papeletasYaActivas: number;
+    eleccionId: string;
+    titulo: string;
+    txHashes: string[];
+  }> {
+    return this.jornadaService.forzarSyncBlockchain();
+  }
+
+  /**
    * Obtiene una eleccion por ID.
    * @param eleccionId Identificador UUID de la eleccion.
    * @returns Eleccion encontrada.

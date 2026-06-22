@@ -67,6 +67,14 @@ export function buildPositionPayload(form) {
     alcance: form.alcance,
   }
 
+  if (form.alcance === ALCANCE_PAPELETA.GLOBAL) {
+    payload.tipoCargo = 'RECTOR'
+  } else if (form.alcance === ALCANCE_PAPELETA.FACULTAD) {
+    payload.tipoCargo = 'DECANO'
+  } else if (form.alcance === ALCANCE_PAPELETA.CARRERA) {
+    payload.tipoCargo = 'DIRECTOR_CARRERA'
+  }
+
   if (form.alcance === ALCANCE_PAPELETA.FACULTAD || form.alcance === ALCANCE_PAPELETA.CARRERA) {
     payload.codFacultad = form.codFacultad
     payload.facultadNombre = form.facultadNombre || undefined

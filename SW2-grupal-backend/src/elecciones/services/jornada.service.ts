@@ -197,6 +197,79 @@ export class JornadaService {
     );
   }
 
+  /**
+   * Endpoint de desarrollo: reactiva on-chain todas las papeletas de la elección ACTIVA.
+   * Útil tras redeploy del contrato o reinicio de la red Hardhat local.
+   */
+  async forzarSyncBlockchain(): Promise<{
+    message: string;
+    papeletas: number;
+    papeletasSincronizadas: number;
+    papeletasYaActivas: number;
+    eleccionId: string;
+    titulo: string;
+    txHashes: string[];
+  }> {
+    if (process.env.ENABLE_BLOCKCHAIN !== 'true') {
+      throw new ServiceUnavailableException(
+        'ENABLE_BLOCKCHAIN debe estar en true para sincronizar papeletas on-chain.',
+      );
+    }
+
+    const eleccion = await this.eleccionRepository.findOne({
+      where: {
+        estado: EstadoEleccionEnum.ACTIVA,
+        estaActiva: true,
+      },
+      order: { fecha: 'DESC' },
+    });
+
+    if (!eleccion) {
+      throw new NotFoundException('No hay ninguna elección en estado ACTIVA.');
+    }
+
+    const papeletas = await this.eleccionCargoRepository.find({
+      where: { eleccion: { id: eleccion.id } },
+      order: { orden: 'ASC' },
+    });
+
+    if (papeletas.length === 0) {
+      throw new BadRequestException(
+        'La elección activa no tiene papeletas configuradas para sincronizar.',
+      );
+    }
+
+    const privateKey = this.getVotingWalletPrivateKey();
+    const papeletaIds = papeletas.map((papeleta) => papeleta.id);
+
+    let yaActivas = 0;
+    for (const papeleta of papeletas) {
+      if (await this.blockchainService.esPapeletaActivaOnChain(papeleta.id)) {
+        yaActivas += 1;
+      }
+    }
+
+    this.logger.warn(
+      `[DEV] Forzando sync on-chain de ${papeletas.length} papeleta(s) para "${eleccion.titulo}" (${eleccion.id}).`,
+    );
+
+    const txHashes = await this.blockchainService.configurarPapeletasActivasEnLote(
+      papeletaIds,
+      true,
+      privateKey,
+    );
+
+    return {
+      message: 'Blockchain sincronizada con éxito',
+      papeletas: papeletas.length,
+      papeletasSincronizadas: txHashes.length,
+      papeletasYaActivas: yaActivas,
+      eleccionId: eleccion.id,
+      titulo: eleccion.titulo,
+      txHashes,
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  MÉTODOS PRIVADOS
   // ═══════════════════════════════════════════════════════════════════════════
@@ -224,14 +297,17 @@ export class JornadaService {
     }
 
     const privateKey = this.getVotingWalletPrivateKey();
+    const papeletaIds = papeletas.map((papeleta) => papeleta.id);
 
-    for (const papeleta of papeletas) {
-      await this.blockchainService.configurarEleccionActiva(
-        papeleta.id,
-        true,
-        privateKey,
-      );
-    }
+    const txHashes = await this.blockchainService.configurarPapeletasActivasEnLote(
+      papeletaIds,
+      true,
+      privateKey,
+    );
+
+    this.logger.log(
+      `Activadas on-chain ${txHashes.length}/${papeletas.length} papeleta(s) para la elección ${eleccionId}.`,
+    );
   }
 
   private getVotingWalletPrivateKey(): string {

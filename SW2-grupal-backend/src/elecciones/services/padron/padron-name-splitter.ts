@@ -5,9 +5,74 @@ export interface NombreSplitResult {
   nombreAmbiguo: boolean;
 }
 
+/** Nombres propios frecuentes en el padrón UAGRM (sin acentos para comparación). */
+const NOMBRES_PROPIOS = new Set([
+  'ABIGAIL',
+  'ANA',
+  'ANDREA',
+  'ARTURO',
+  'CAMILA',
+  'CARLA',
+  'CARLOS',
+  'DANIEL',
+  'DANIELA',
+  'DAVID',
+  'DIEGO',
+  'ELIZABETH',
+  'FERNANDO',
+  'GABRIEL',
+  'GABRIELA',
+  'JORGE',
+  'JOSE',
+  'JUAN',
+  'JULIA',
+  'KAREN',
+  'LAURA',
+  'LUIS',
+  'MARIA',
+  'MARIO',
+  'MARTHA',
+  'MIGUEL',
+  'MONICA',
+  'PABLO',
+  'PATRICIA',
+  'PEDRO',
+  'ROBERTO',
+  'RODRIGO',
+  'RUTH',
+  'SANDRA',
+  'SERGIO',
+  'SOFIA',
+  'VALERIA',
+  'VICTOR',
+  'WALTER',
+]);
+
+function normalizarTokenNombre(token: string): string {
+  return token
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function esNombrePropioConocido(token: string): boolean {
+  return NOMBRES_PROPIOS.has(normalizarTokenNombre(token));
+}
+
+function pareceNombrePropio(token: string): boolean {
+  if (esNombrePropioConocido(token)) return true;
+  const normalizado = normalizarTokenNombre(token);
+  if (!normalizado) return false;
+  // Heurística suave solo para tokens no ambiguos.
+  return /^[A-Z]{3,}$/.test(normalizado) && /[AEIOU]$/.test(normalizado);
+}
+
 /**
  * Divide un nombre completo en nombre(s) y apellido(s).
- * Heurística para formato boliviano: APELLIDO_PATERNO APELLIDO_MATERNO NOMBRE(S).
+ * Soporta formatos bolivianos:
+ * - APELLIDO_PATERNO APELLIDO_MATERNO NOMBRE(S)
+ * - NOMBRE(S) APELLIDO_PATERNO APELLIDO_MATERNO (columna "Nombre" del padrón UAGRM)
  */
 export function splitNombreCompleto(nombreCompleto: string): NombreSplitResult {
   const tokens = nombreCompleto.trim().split(/\s+/).filter(Boolean);
@@ -25,6 +90,45 @@ export function splitNombreCompleto(nombreCompleto: string): NombreSplitResult {
   }
 
   if (tokens.length === 3) {
+    const primeroConocido = esNombrePropioConocido(tokens[0]);
+    const ultimoConocido = esNombrePropioConocido(tokens[2]);
+
+    if (ultimoConocido && !primeroConocido) {
+      return {
+        nombre: tokens[2],
+        apellido: `${tokens[0]} ${tokens[1]}`,
+        nombreAmbiguo: false,
+      };
+    }
+
+    if (primeroConocido && !ultimoConocido) {
+      return {
+        nombre: tokens[0],
+        apellido: `${tokens[1]} ${tokens[2]}`,
+        nombreAmbiguo: false,
+      };
+    }
+
+    const ultimoPareceNombre = pareceNombrePropio(tokens[2]);
+    const primeroPareceNombre = pareceNombrePropio(tokens[0]);
+
+    if (ultimoPareceNombre && !primeroPareceNombre) {
+      return {
+        nombre: tokens[2],
+        apellido: `${tokens[0]} ${tokens[1]}`,
+        nombreAmbiguo: false,
+      };
+    }
+
+    if (primeroPareceNombre && !ultimoPareceNombre) {
+      return {
+        nombre: tokens[0],
+        apellido: `${tokens[1]} ${tokens[2]}`,
+        nombreAmbiguo: false,
+      };
+    }
+
+    // Fallback histórico: apellidos al inicio.
     return {
       nombre: tokens[2],
       apellido: `${tokens[0]} ${tokens[1]}`,
