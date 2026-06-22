@@ -6,6 +6,7 @@ import {
   updateCandidate,
 } from '../../../services/electionsService'
 import { handleMutationApiError } from '../../../utils/apiErrorUtils'
+import { resolveMediaUrl } from '../../../utils/mediaUrlUtils'
 import { READ_ONLY_ELECTION_HELP } from '../../../utils/electionConstants'
 import {
   ALCANCE_LABELS,
@@ -459,7 +460,7 @@ export default function CandidatesSection({
             />
             {candidateForm.fotoPreview ? (
               <img
-                src={candidateForm.fotoPreview}
+                src={resolveMediaUrl(candidateForm.fotoPreview)}
                 alt="Foto"
                 className="h-10 w-10 rounded-lg border border-slate-200 object-cover"
               />
@@ -562,7 +563,7 @@ export default function CandidatesSection({
                     <td className="px-4 py-3">
                       {candidate.fotoUrl ? (
                         <img
-                          src={candidate.fotoUrl}
+                          src={resolveMediaUrl(candidate.fotoUrl)}
                           alt={fullName}
                           className="h-16 w-16 rounded-lg border border-slate-200 object-cover"
                         />

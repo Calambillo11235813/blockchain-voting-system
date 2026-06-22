@@ -1,4 +1,5 @@
 import CandidateCard from './CandidateCard'
+import { resolveMediaUrl } from '../../../../utils/mediaUrlUtils'
 
 /**
  * Tarjeta de frente con su fórmula de candidatos para una papeleta.
@@ -14,13 +15,15 @@ import CandidateCard from './CandidateCard'
  * @returns {import('react').JSX.Element}
  */
 function FrenteFormulaCard({ front }) {
+  const logoSrc = resolveMediaUrl(front.logoUrl)
+
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col items-center gap-3 text-center">
         <div className="h-24 w-24 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-          {front.logoUrl ? (
+          {logoSrc ? (
             <img
-              src={front.logoUrl}
+              src={logoSrc}
               alt={`Logo de ${front.nombreFrente}`}
               className="h-full w-full object-cover"
             />

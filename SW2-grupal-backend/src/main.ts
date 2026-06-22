@@ -10,6 +10,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { CORS } from './compartido/cors';
 import { json, urlencoded } from 'express';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 // import * as fs from 'fs';
 // import { HttpsOptions } from '@nestjs/common/interfaces/external/https-options.interface';
 
@@ -51,6 +52,8 @@ async function bootstrap() {
 
   app.use(json({ limit: '15mb' }));
   app.use(urlencoded({ extended: true, limit: '15mb' }));
+
+  app.useStaticAssets(join(process.cwd(), 'public'));
 
   app.enableCors(CORS);
   await app.listen(port, () => {

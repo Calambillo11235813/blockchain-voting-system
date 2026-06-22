@@ -38,7 +38,15 @@ export class AuditoriaController {
   @UseGuards(AuthGuard('jwt'), SistemasGuard)
   async obtenerBitacora() {
     const bitacora = await this.dataSource.query(
-      `SELECT id, "hashTransaccion" AS "txHash", "fechaSufragio" AS "fecha" FROM "registro_sufragio" ORDER BY "fechaSufragio" DESC LIMIT 100`
+      `SELECT 
+         "hashTransaccion" AS "txHash", 
+         MAX("fechaSufragio") AS "fecha",
+         COUNT(id) AS "cantidadPapeletas",
+         json_agg(id) AS "detallesVoto"
+       FROM "registro_sufragio" 
+       GROUP BY "hashTransaccion" 
+       ORDER BY "fecha" DESC 
+       LIMIT 100`
     );
     return {
       success: true,

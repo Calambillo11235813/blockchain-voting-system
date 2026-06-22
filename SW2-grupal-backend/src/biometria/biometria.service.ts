@@ -5,6 +5,7 @@ import { Elector } from '../electores/entities/elector.entity';
 import { ArchivosBiometriaValidados } from './dto/validar-identidad-archivos.dto';
 import { FaceMatchService } from './services/face-match.service';
 import { OcrService } from './services/ocr.service';
+import { ConfiguracionService } from '../elecciones/services/configuracion.service';
 
 export interface ResultadoValidacionIdentidad {
   verificado: boolean;
@@ -17,15 +18,12 @@ export class BiometriaService {
   private readonly debugBiometria =
     String(process.env.BIOMETRIA_DEBUG || '').toLowerCase() === 'true' ||
     process.env.NODE_ENV !== 'production';
-  private readonly bypassBiometriaMaestro =
-    String(process.env.BYPASS_BIOMETRIA_FACE_MATCH || '').toLowerCase() === 'true';
-  private readonly bypassOcrMaestro =
-    String(process.env.BYPASS_BIOMETRIA_OCR || '').toLowerCase() === 'true';
 
   constructor(
     private readonly electoresService: ElectoresService,
     private readonly ocrService: OcrService,
     private readonly faceMatchService: FaceMatchService,
+    private readonly configuracionService: ConfiguracionService,
   ) { }
 
   /**
@@ -39,18 +37,26 @@ export class BiometriaService {
     const traceId = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
     try {
+      const bypassOcrMaestro =
+        (await this.configuracionService.obtenerValor('BYPASS_BIOMETRIA_OCR')) === true ||
+        String(process.env.BYPASS_BIOMETRIA_OCR || '').toLowerCase() === 'true';
+
+      const bypassBiometriaMaestro =
+        (await this.configuracionService.obtenerValor('BYPASS_BIOMETRIA_FACE_MATCH')) === true ||
+        String(process.env.BYPASS_BIOMETRIA_FACE_MATCH || '').toLowerCase() === 'true';
+
       this.logDebug(traceId, 'Inicio de verificacion biometrica', {
         frontal: this.resumenArchivo(archivos.frontal),
         trasera: this.resumenArchivo(archivos.trasera),
         selfie: this.resumenArchivo(archivos.selfie),
-        bypassOcr: this.bypassOcrMaestro,
+        bypassOcr: bypassOcrMaestro,
       });
 
       let datosCarnet = { ci: '', nombres: '', apellidos: '', candidatosCi: [] as string[] };
       let ciSeleccionado = '';
       let elector: Elector | null = null;
 
-      if (this.bypassOcrMaestro && reqUser) {
+      if (bypassOcrMaestro && reqUser) {
         this.logDebug(traceId, 'Bypass Mastro de OCR activado. Omitiendo extracción con Gemini/Tesseract y validación de nombres.');
         ciSeleccionado = reqUser.ci;
         elector = reqUser as Elector;
@@ -103,7 +109,7 @@ export class BiometriaService {
         }
       }
 
-      if (this.bypassBiometriaMaestro) {
+      if (bypassBiometriaMaestro) {
         this.logDebug(traceId, 'Bypass Maestro de verificacion facial activado. Saltando comparacion 1:1.');
       } else {
         const verificacionFacialExitosa = await this.faceMatchService.verificarRostro(

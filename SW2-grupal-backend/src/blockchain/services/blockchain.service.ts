@@ -36,6 +36,8 @@ export class BlockchainService implements OnModuleInit {
   private provider?: ethers.JsonRpcProvider;
   private readonly rpcUrl = process.env.BLOCKCHAIN_RPC_URL || process.env.BLOCKCHAIN_URL || 'http://127.0.0.1:8545';
   private readonly defaultContractAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+  private readonly signerCache: Map<string, ethers.NonceManager> = new Map();
+  private txMutex: Promise<void> = Promise.resolve();
 
   constructor(
     @InjectRepository(ParametroSistema)
@@ -104,10 +106,19 @@ export class BlockchainService implements OnModuleInit {
     return ethers.keccak256(ethers.toUtf8Bytes(id));
   }
 
-  private createWallet(privateKey: string): ethers.Wallet {
+  private createWallet(privateKey: string): ethers.NonceManager {
     const trimmedKey = privateKey.trim();
     const normalizedKey = trimmedKey.startsWith('0x') ? trimmedKey : `0x${trimmedKey}`;
-    return new ethers.Wallet(normalizedKey, this.getProvider());
+    
+    if (this.signerCache.has(normalizedKey)) {
+      return this.signerCache.get(normalizedKey)!;
+    }
+
+    const wallet = new ethers.Wallet(normalizedKey, this.getProvider());
+    const nonceManager = new ethers.NonceManager(wallet);
+    this.signerCache.set(normalizedKey, nonceManager);
+    
+    return nonceManager;
   }
 
   private async getContract(): Promise<VotacionContract> {
@@ -180,13 +191,11 @@ export class BlockchainService implements OnModuleInit {
     }
 
     const wallet = this.createWallet(privateKey);
-    const provider = this.getProvider();
     const address = await this.getActiveContractAddress();
     const abi = (VotacionAbi as { abi?: unknown }).abi ?? VotacionAbi;
     const contract = new ethers.Contract(address, abi as ethers.InterfaceAbi, wallet);
     const contractReadOnly = await this.getContract();
 
-    let nonce = await provider.getTransactionCount(wallet.address, 'pending');
     const txHashes: string[] = [];
 
     for (const papeletaId of papeletaIds) {
@@ -199,10 +208,9 @@ export class BlockchainService implements OnModuleInit {
         }
       }
 
-      const tx = await contract.configurarEleccionActiva(eleccionHash, activa, { nonce });
+      const tx = await contract.configurarEleccionActiva(eleccionHash, activa);
       await tx.wait();
       txHashes.push(tx.hash);
-      nonce += 1;
     }
 
     return txHashes;
@@ -242,9 +250,17 @@ export class BlockchainService implements OnModuleInit {
     const candidatos = frentesIds.map((id) => this.hashUuid(id));
     const electorHash = this.hashUuid(electorId);
 
-    const tx = await contractWithSigner.votarBatch(elecciones, candidatos, electorHash, estamento);
-    await tx.wait();
-    return tx.hash;
+    return new Promise<string>((resolve, reject) => {
+      this.txMutex = this.txMutex.then(async () => {
+        try {
+          const tx = await contractWithSigner.votarBatch(elecciones, candidatos, electorHash, estamento);
+          await tx.wait();
+          resolve(tx.hash);
+        } catch (error) {
+          reject(error);
+        }
+      }).catch(() => {}); // Prevenir unhandled rejections rompiendo la cadena
+    });
   }
 
   /**

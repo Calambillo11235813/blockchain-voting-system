@@ -1,3 +1,5 @@
+import { resolveMediaUrl } from '../../../../utils/mediaUrlUtils'
+
 /**
  * Tarjeta de candidato dentro de una fórmula/frente.
  * @param {{
@@ -14,11 +16,13 @@ export default function CandidateCard({ candidate }) {
   const fullName = candidate.fullName || 'Candidato'
   const rolLabel = candidate.rolEspecifico?.trim() || 'Rol no asignado'
 
+  const photoSrc = resolveMediaUrl(candidate.fotoUrl)
+
   return (
     <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-      {candidate.fotoUrl ? (
+      {photoSrc ? (
         <img
-          src={candidate.fotoUrl}
+          src={photoSrc}
           alt={fullName}
           className="h-14 w-14 shrink-0 rounded-xl border border-slate-200 object-cover"
         />

@@ -127,31 +127,7 @@ export default function AuditoriaBlockchain() {
         <p className="mt-2 break-all font-mono text-sm text-gray-900">{datos.hacia}</p>
       </div>
 
-      <div className="rounded-lg border border-gray-200 p-4">
-        <p className="text-xs font-semibold uppercase text-gray-500">Datos de Entrada (Decodificados)</p>
-        {datos.datosDecodificados?.metodo ? (
-          <div className="mt-2 space-y-2">
-            <p className="text-sm font-semibold text-blue-800">Método: <span className="font-mono">{datos.datosDecodificados.metodo}</span></p>
-            {datos.datosDecodificados.eleccionHash && (
-              <div className="text-xs text-gray-700 font-mono bg-gray-50 p-3 rounded">
-                <p><strong className="text-gray-900">Elección Hash:</strong> {datos.datosDecodificados.eleccionHash}</p>
-                <p className="mt-1"><strong className="text-gray-900">Candidato Hash:</strong> {datos.datosDecodificados.candidatoHash}</p>
-                <p className="mt-1"><strong className="text-gray-900">Elector Hash:</strong> {datos.datosDecodificados.electorHash}</p>
-              </div>
-            )}
-            <details className="mt-2">
-              <summary className="text-xs cursor-pointer text-gray-500 hover:text-gray-700">Ver Payload Original (Raw Data)</summary>
-              <p className="mt-2 break-all font-mono text-xs text-gray-500 bg-gray-50 p-2 rounded">
-                {datos.datosDecodificados.rawData}
-              </p>
-            </details>
-          </div>
-        ) : (
-          <p className="mt-2 break-all font-mono text-xs text-gray-900">
-            {datos.datosDecodificados?.rawData || datos.entrada || 'No disponible'}
-          </p>
-        )}
-      </div>
+
     </div>
   )
 

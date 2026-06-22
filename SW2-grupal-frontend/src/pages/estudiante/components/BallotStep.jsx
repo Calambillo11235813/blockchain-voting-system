@@ -1,3 +1,5 @@
+import { resolveMediaUrl } from '../../../utils/mediaUrlUtils'
+
 const BLANK_VOTE_ID = 'BLANCO'
 
 /**
@@ -121,7 +123,7 @@ export default function BallotStep({
                 <div className={`h-28 w-28 overflow-hidden rounded-2xl border ${isSelected ? 'border-yellow-300' : 'border-slate-200'} bg-slate-50`}>
                   {front.logoUrl ? (
                     <img
-                      src={front.logoUrl}
+                      src={resolveMediaUrl(front.logoUrl)}
                       alt={`Logo ${front.nombreFrente}`}
                       className="h-full w-full object-cover"
                     />
@@ -151,7 +153,7 @@ export default function BallotStep({
                       <div key={cand.id || idx} className="rounded-lg border border-slate-200 bg-white p-3 text-center flex flex-col items-center">
                         {cand.fotoUrl ? (
                           <img
-                            src={cand.fotoUrl}
+                            src={resolveMediaUrl(cand.fotoUrl)}
                             alt={cand.fullName}
                             className="mx-auto h-40 w-40 rounded-2xl border border-slate-200 object-cover"
                           />

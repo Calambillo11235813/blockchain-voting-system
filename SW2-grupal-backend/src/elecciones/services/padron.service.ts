@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { PadronElectoral } from '../entities/padron-electoral.entity';
 import { Eleccion } from '../entities/eleccion.entity';
 import { RegistroSufragio } from '../entities/registro-sufragio.entity';
@@ -48,6 +48,81 @@ export class PadronService {
     private readonly dataSource: DataSource,
     private readonly eleccionEstadoService: EleccionEstadoService,
   ) { }
+
+  /**
+   * Vincula automáticamente el padrón existente a una elección recién creada.
+   *
+   * Prioridad:
+   *   1. Clonar entradas de la elección que tenga más registros en `padron_electoral`.
+   *   2. Si no hay padrón previo, inscribir todos los electores del catálogo global.
+   *
+   * @returns Cantidad de electores vinculados al padrón de la elección.
+   */
+  async vincularPadronExistenteAEleccion(
+    eleccionId: string,
+    manager?: EntityManager,
+  ): Promise<number> {
+    const padronRepo = manager
+      ? manager.getRepository(PadronElectoral)
+      : this.padronElectoralRepository;
+    const electorRepo = manager
+      ? manager.getRepository(Elector)
+      : this.electorRepository;
+
+    const fuente = await padronRepo
+      .createQueryBuilder('p')
+      .select('p.eleccionId', 'eleccionId')
+      .addSelect('COUNT(*)', 'total')
+      .where('p.eleccionId != :eleccionId', { eleccionId })
+      .groupBy('p.eleccionId')
+      .orderBy('total', 'DESC')
+      .limit(1)
+      .getRawOne<{ eleccionId: string; total: string }>();
+
+    let padronEntities: PadronElectoral[] = [];
+
+    if (fuente?.eleccionId) {
+      const entradasFuente = await padronRepo.find({
+        where: { eleccion: { id: fuente.eleccionId } },
+        relations: ['elector'],
+      });
+
+      padronEntities = entradasFuente.map((entrada) =>
+        padronRepo.create({
+          eleccion: { id: eleccionId } as Eleccion,
+          elector: { id: entrada.elector.id } as Elector,
+          estaHabilitado: entrada.estaHabilitado,
+          codLugar: entrada.codLugar,
+          lugarVotacion: entrada.lugarVotacion,
+          habilitadoRector: entrada.habilitadoRector,
+        }),
+      );
+    } else {
+      const electores = await electorRepo.find({ select: ['id'] });
+
+      padronEntities = electores.map((elector) =>
+        padronRepo.create({
+          eleccion: { id: eleccionId } as Eleccion,
+          elector: { id: elector.id } as Elector,
+          estaHabilitado: true,
+          codLugar: null,
+          lugarVotacion: null,
+          habilitadoRector: false,
+        }),
+      );
+    }
+
+    if (padronEntities.length === 0) {
+      return 0;
+    }
+
+    await padronRepo.upsert(padronEntities, {
+      conflictPaths: ['eleccion', 'elector'],
+      skipUpdateIfNoValuesChanged: true,
+    });
+
+    return padronEntities.length;
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  RF1 — CARGA MASIVA DEL PADRÓN ELECTORAL

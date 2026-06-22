@@ -1,11 +1,12 @@
 import { BadRequestException, ForbiddenException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Eleccion } from '../entities/eleccion.entity';
 import { ApiResponse, createApiResponse } from 'src/compartido/respuesta';
 import { CrearEleccionDto } from '../dto/eleccion/crear-eleccion.dto';
 import { ActualizarEleccionDto } from '../dto/eleccion/actualizar-eleccion.dto';
 import { EstadoEleccionEnum } from '../enums/estado-eleccion.enum';
+import { PadronService } from './padron.service';
 
 /**
  * Servicio del dominio de elecciones facultativas.
@@ -18,6 +19,8 @@ export class EleccionesLegacyService {
   constructor(
     @InjectRepository(Eleccion)
     private readonly eleccionRepository: Repository<Eleccion>,
+    private readonly dataSource: DataSource,
+    private readonly padronService: PadronService,
   ) {}
 
   /**
@@ -43,8 +46,22 @@ export class EleccionesLegacyService {
       estado: EstadoEleccionEnum.EN_CONFIGURACION,
     });
 
-    const guardada = await this.eleccionRepository.save(eleccion);
-    return createApiResponse(HttpStatus.CREATED, guardada, 'Eleccion creada correctamente.');
+    let vinculados = 0;
+
+    const guardada = await this.dataSource.transaction(async (manager) => {
+      const eleccionGuardada = await manager.save(Eleccion, eleccion);
+      vinculados = await this.padronService.vincularPadronExistenteAEleccion(
+        eleccionGuardada.id,
+        manager,
+      );
+      return eleccionGuardada;
+    });
+
+    const mensaje = vinculados > 0
+      ? `Eleccion creada correctamente. Padrón vinculado automáticamente (${vinculados} electores).`
+      : 'Eleccion creada correctamente. Cargue el padrón Excel cuando esté listo.';
+
+    return createApiResponse(HttpStatus.CREATED, guardada, mensaje);
   }
 
   /**

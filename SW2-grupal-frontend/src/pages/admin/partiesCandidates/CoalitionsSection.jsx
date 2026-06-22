@@ -6,6 +6,7 @@ import {
   updateFrente,
 } from '../../../services/electionsService'
 import { handleMutationApiError } from '../../../utils/apiErrorUtils'
+import { resolveMediaUrl } from '../../../utils/mediaUrlUtils'
 import { READ_ONLY_ELECTION_HELP } from '../../../utils/electionConstants'
 import {
   ActionButton,
@@ -282,7 +283,7 @@ export default function CoalitionsSection({
             />
             {coalitionForm.logoPreview ? (
               <img
-                src={coalitionForm.logoPreview}
+                src={resolveMediaUrl(coalitionForm.logoPreview)}
                 alt="Logo"
                 className="h-10 w-10 rounded-lg border border-slate-200 object-cover"
               />
@@ -329,7 +330,7 @@ export default function CoalitionsSection({
                   <td className="px-4 py-3">
                     {coalition.logoUrl ? (
                       <img
-                        src={coalition.logoUrl}
+                        src={resolveMediaUrl(coalition.logoUrl)}
                         alt="Logo"
                         className="h-9 w-9 rounded-lg border border-slate-200 object-cover"
                       />

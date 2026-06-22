@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { fetchBallotComplete, fetchElections } from '../services/electionsService'
 import { emitirVotoBatch } from '../services/votoService'
 import { verificarEstadoVoto, descargarCertificado } from '../services/certificadoService'
-import { getEstadisticasEstudiantes, getEstadisticasDocentes } from '../services/estadisticasService'
+import { getEstadisticasJerarquicas } from '../services/estadisticasService'
 import { useAuth } from '../context/AuthContext'
 import { decodeJwtPayload } from '../utils/jwt'
 import { buildBallotPreviews } from './admin/electoral/ballotPreviewUtils'
@@ -105,35 +105,37 @@ export default function VotingBallot() {
         setElectionLabel(`${active.titulo} (${active.gestion})`)
         setActiveElectionId(active.id)
 
+        const payload = decodeJwtPayload(token)
+        const registro = typeof payload?.registro === 'string' ? payload.registro : undefined
+
+        if (!registro) {
+          if (isMounted) {
+            setErrorMessage('No se pudo identificar su registro universitario. Vuelva a iniciar sesión.')
+          }
+          return
+        }
+
+        // Siempre cargamos la papeleta para saber los cargos a los que el votante tiene acceso
+        // y así poder mostrar las estadísticas filtradas por papeleta.
+        const data = await fetchBallotComplete(active.id, registro)
+        if (isMounted) setBallot(data)
+
         const estadoVoto = await verificarEstadoVoto(active.id)
         if (estadoVoto.haVotado) {
           if (isMounted) {
             setHaVotado(true)
             setTxHash(estadoVoto.txHash)
-            const statsMethod = role === 'DOCENTE' ? getEstadisticasDocentes : getEstadisticasEstudiantes
             try {
-              const statsData = await statsMethod(active.id)
+              // Usamos jerárquicas para tener el desglose por papeleta
+              const statsData = await getEstadisticasJerarquicas(active.id)
               setEstadisticas(statsData)
             } catch (err) {
               console.error('Error cargando estadísticas', err)
             }
           }
-        } else {
-          const payload = decodeJwtPayload(token)
-          const registro = typeof payload?.registro === 'string' ? payload.registro : undefined
-
-          if (!registro) {
-            if (isMounted) {
-              setErrorMessage('No se pudo identificar su registro universitario. Vuelva a iniciar sesión.')
-            }
-            return
-          }
-
-          const data = await fetchBallotComplete(active.id, registro)
-          if (isMounted) setBallot(data)
         }
       } catch {
-        if (isMounted) setErrorMessage('No se pudo cargar la papeleta. Inténtelo más tarde.')
+        if (isMounted) setErrorMessage('No se pudo cargar la información. Inténtelo más tarde.')
       } finally {
         if (isMounted) setIsLoading(false)
       }
@@ -142,6 +144,14 @@ export default function VotingBallot() {
     loadActiveBallot()
     return () => { isMounted = false }
   }, [token, role])
+
+  // Inicializar la papeleta seleccionada para estadísticas cuando se carga el ballot y ya votó
+  const [selectedPapeletaId, setSelectedPapeletaId] = useState('')
+  useEffect(() => {
+    if (haVotado && orderedBallots.length > 0 && !selectedPapeletaId) {
+      setSelectedPapeletaId(orderedBallots[0].id)
+    }
+  }, [haVotado, orderedBallots, selectedPapeletaId])
 
   function handleSelectOption(selection) {
     if (!selection?.eleccionCargoId) return
@@ -164,9 +174,8 @@ export default function VotingBallot() {
   }
 
   async function loadPostVoteStats(eleccionId) {
-    const statsMethod = role === 'DOCENTE' ? getEstadisticasDocentes : getEstadisticasEstudiantes
     try {
-      const statsData = await statsMethod(eleccionId)
+      const statsData = await getEstadisticasJerarquicas(eleccionId)
       setEstadisticas(statsData)
     } catch (err) {
       console.error('Error cargando estadísticas', err)
@@ -334,70 +343,109 @@ export default function VotingBallot() {
                 <h3 className="mb-4 text-lg font-bold text-slate-900">
                   Estadísticas en vivo - {role === 'DOCENTE' ? 'Docentes' : 'Estudiantes'}
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-sm font-medium text-slate-500">Total Habilitados</p>
-                    <p className="mt-1 text-2xl font-black text-blue-900">{estadisticas.totalHabilitados}</p>
+                {/* --- NUEVO SUB-MENU DE FILTRO (PILLS) --- */}
+                {orderedBallots.length > 0 && (
+                  <div className="mb-6 flex flex-wrap gap-2">
+                    {orderedBallots.map((papeleta) => (
+                      <button
+                        key={papeleta.id}
+                        type="button"
+                        onClick={() => setSelectedPapeletaId(papeleta.id)}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                          selectedPapeletaId === papeleta.id
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {papeleta.title || papeleta.alcanceLabel}
+                      </button>
+                    ))}
                   </div>
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="text-sm font-medium text-slate-500">Votos Emitidos</p>
-                    <p className="mt-1 text-2xl font-black text-green-600">{estadisticas.totalVotosEmitidos}</p>
-                  </div>
-                </div>
+                )}
 
-                <div className="mt-6">
-                  <div className="flex flex-col items-center">
-                    <p className="mb-4 text-sm font-semibold text-slate-700">Participación del Estamento</p>
-                    {(() => {
-                      const pct = Math.min(100, Math.max(0, estadisticas.porcentajeParticipacion))
-                      const radius = 54
-                      const circumference = 2 * Math.PI * radius
-                      const filled = (pct / 100) * circumference
-                      const remaining = circumference - filled
-                      return (
-                        <div className="relative inline-flex items-center justify-center">
-                          <svg width="140" height="140" viewBox="0 0 140 140" className="-rotate-90">
-                            <circle cx="70" cy="70" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="12" />
-                            <circle
-                              cx="70"
-                              cy="70"
-                              r={radius}
-                              fill="none"
-                              stroke="url(#donutGradient)"
-                              strokeWidth="12"
-                              strokeLinecap="round"
-                              strokeDasharray={`${filled} ${remaining}`}
-                            />
-                            <defs>
-                              <linearGradient id="donutGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#2563eb" />
-                                <stop offset="100%" stopColor="#16a34a" />
-                              </linearGradient>
-                            </defs>
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-2xl font-black text-blue-900">{pct}%</span>
-                            <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">participación</span>
+                {(() => {
+                  const papeletaStats = estadisticas.papeletas?.find((p) => p.eleccionCargoId === selectedPapeletaId)
+                  const roleKey = role === 'DOCENTE' ? 'docente' : 'estudiante'
+                  const estamentoData = papeletaStats?.porEstamento?.[roleKey]
+
+                  if (!papeletaStats || !estamentoData || estamentoData.habilitados === 0) {
+                    return (
+                      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-700">
+                        Aún no hay electores habilitados o votos registrados para esta papeleta.
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-sm font-medium text-slate-500">Total Habilitados</p>
+                          <p className="mt-1 text-2xl font-black text-blue-900">{estamentoData.habilitados}</p>
+                        </div>
+                        <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                          <p className="text-sm font-medium text-slate-500">Votos Emitidos</p>
+                          <p className="mt-1 text-2xl font-black text-green-600">{estamentoData.votos}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6">
+                        <div className="flex flex-col items-center">
+                          <p className="mb-4 text-sm font-semibold text-slate-700">Participación del Estamento</p>
+                          {(() => {
+                            const pct = Math.min(100, Math.max(0, estamentoData.porcentaje))
+                            const radius = 54
+                            const circumference = 2 * Math.PI * radius
+                            const filled = (pct / 100) * circumference
+                            const remaining = circumference - filled
+                            return (
+                              <div className="relative inline-flex items-center justify-center">
+                                <svg width="140" height="140" viewBox="0 0 140 140" className="-rotate-90">
+                                  <circle cx="70" cy="70" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="12" />
+                                  <circle
+                                    cx="70"
+                                    cy="70"
+                                    r={radius}
+                                    fill="none"
+                                    stroke="url(#donutGradient)"
+                                    strokeWidth="12"
+                                    strokeLinecap="round"
+                                    strokeDasharray={`${filled} ${remaining}`}
+                                  />
+                                  <defs>
+                                    <linearGradient id="donutGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                      <stop offset="0%" stopColor="#2563eb" />
+                                      <stop offset="100%" stopColor="#16a34a" />
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                  <span className="text-2xl font-black text-blue-900">{pct}%</span>
+                                  <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400">participación</span>
+                                </div>
+                              </div>
+                            )
+                          })()}
+
+                          <div className="mt-4 flex items-center gap-5 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+                              <span className="text-slate-600">
+                                Votaron: <strong className="text-slate-900">{estamentoData.votos}</strong>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-200" />
+                              <span className="text-slate-600">
+                                Pendientes: <strong className="text-slate-900">{estamentoData.habilitados - estamentoData.votos}</strong>
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      )
-                    })()}
-
-                    <div className="mt-4 flex items-center gap-5 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
-                        <span className="text-slate-600">
-                          Votaron: <strong className="text-slate-900">{estadisticas.totalVotosEmitidos}</strong>
-                        </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-200" />
-                        <span className="text-slate-600">
-                          Pendientes: <strong className="text-slate-900">{estadisticas.totalHabilitados - estadisticas.totalVotosEmitidos}</strong>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                    </>
+                  )
+                })()}
 
                   {txHash && (
                     <div className="relative mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-5 group">
@@ -422,7 +470,6 @@ export default function VotingBallot() {
                       </button>
                     </div>
                   )}
-                </div>
               </div>
             )}
           </div>
