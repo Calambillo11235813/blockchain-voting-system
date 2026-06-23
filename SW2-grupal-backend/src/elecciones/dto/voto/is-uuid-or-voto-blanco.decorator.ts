@@ -5,8 +5,8 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-import { validate as validateUuid } from 'uuid';
 import { VOTO_BLANCO_ID } from '../../constants/voto-blanco.constant';
+import { esUuidLike } from './uuid-like.util';
 
 @ValidatorConstraint({ name: 'isUuidOrVotoBlanco', async: false })
 export class IsUuidOrVotoBlancoConstraint implements ValidatorConstraintInterface {
@@ -19,7 +19,7 @@ export class IsUuidOrVotoBlancoConstraint implements ValidatorConstraintInterfac
       return true;
     }
 
-    return validateUuid(value);
+    return esUuidLike(value);
   }
 
   defaultMessage(args: ValidationArguments): string {

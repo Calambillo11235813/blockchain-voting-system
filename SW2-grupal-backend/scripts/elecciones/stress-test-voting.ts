@@ -2,10 +2,8 @@ import { Client } from 'pg';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import * as fs from 'path';
-
-// Cargar variables de entorno desde el .env
-dotenv.config({ path: path.join(__dirname, '../.env') });
+// Cargar variables de entorno desde el .env del backend
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const API_BASE_URL = `http://localhost:${process.env.PORT || 3000}/api`;
 const BATCH_SIZE = 50;

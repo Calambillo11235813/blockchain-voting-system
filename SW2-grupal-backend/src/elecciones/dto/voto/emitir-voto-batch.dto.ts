@@ -3,16 +3,16 @@ import {
   ArrayMinSize,
   IsArray,
   IsNotEmpty,
-  IsUUID,
   ValidateNested,
 } from 'class-validator';
 import { IsUuidOrVotoBlanco } from './is-uuid-or-voto-blanco.decorator';
+import { IsUuidLike } from './is-uuid-like.decorator';
 
 /**
  * Selección individual dentro de un lote de votación (flujo Crucero).
  */
 export class SeleccionVotoDto {
-  @IsUUID('4', { message: 'El ID de la papeleta debe ser un UUID válido.' })
+  @IsUuidLike({ message: 'El ID de la papeleta debe ser un UUID válido.' })
   @IsNotEmpty({ message: 'El ID de la papeleta (eleccionCargo) es requerido.' })
   eleccionCargoId: string;
 
@@ -26,7 +26,7 @@ export class SeleccionVotoDto {
  * El electorId se obtiene del JWT autenticado, no del body.
  */
 export class EmitirVotoBatchDto {
-  @IsUUID('4', { message: 'El ID de la elección debe ser un UUID válido.' })
+  @IsUuidLike({ message: 'El ID de la elección debe ser un UUID válido.' })
   @IsNotEmpty({ message: 'El ID de la elección es requerido.' })
   eleccionId: string;
 

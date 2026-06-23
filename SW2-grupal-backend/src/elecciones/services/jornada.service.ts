@@ -96,14 +96,26 @@ export class JornadaService {
     const estadoActual = eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION;
 
     if (accion === 'ABRIR') {
+      if (
+        estadoActual === EstadoEleccionEnum.ACTIVA &&
+        eleccion.estaActiva
+      ) {
+        throw new BadRequestException('La jornada ya está abierta.');
+      }
+
       if (estadoActual !== EstadoEleccionEnum.SELLADA) {
         throw new BadRequestException(
           'Solo se puede abrir una elección sellada.',
         );
       }
 
+      // Corrige estado inconsistente (p. ej. seed con estaActiva=true y estado=SELLADA).
       if (eleccion.estaActiva) {
-        throw new BadRequestException('La jornada ya está abierta.');
+        this.logger.warn(
+          `Corrigiendo inconsistencia en elección ${eleccionId}: SELLADA con estaActiva=true.`,
+        );
+        eleccion.estaActiva = false;
+        await this.eleccionRepository.save(eleccion);
       }
 
       if (!bypass) {

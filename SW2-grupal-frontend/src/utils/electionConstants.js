@@ -45,10 +45,6 @@ export function isEleccionFinalizada(estado, estaActiva = false) {
   )
 }
 
-/**
- * @param {EstadoEleccion | string | undefined | null} estado
- * @returns {boolean}
- */
 export function canAbrirJornada(estado) {
   return estado === ESTADO_ELECCION.SELLADA
 }

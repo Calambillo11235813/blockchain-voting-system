@@ -260,6 +260,7 @@ export class EleccionesLegacyService {
     }
 
     eleccion.estado = EstadoEleccionEnum.SELLADA;
+    eleccion.estaActiva = false;
     const sellada = await this.eleccionRepository.save(eleccion);
 
     return createApiResponse(

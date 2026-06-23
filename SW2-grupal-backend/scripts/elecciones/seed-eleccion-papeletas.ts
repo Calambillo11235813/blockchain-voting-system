@@ -102,7 +102,7 @@ async function bootstrap() {
       gestion: ELECCION_FIXTURE.gestion,
       fecha: new Date(`${ELECCION_FIXTURE.fecha}T12:00:00`),
       restriccionAlfabeticaActiva: ELECCION_FIXTURE.restriccionAlfabeticaActiva,
-      estaActiva: true,
+      estaActiva: false,
       estado: EstadoEleccionEnum.EN_CONFIGURACION,
     });
     await queryRunner.manager.save(Eleccion, eleccion);
