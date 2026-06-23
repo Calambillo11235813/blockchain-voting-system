@@ -1,12 +1,55 @@
+# ============================================================
+# .dockerignore — Backend NestJS
+# Excluye archivos innecesarios para reducir el contexto de build
+# ============================================================
+
+# Dependencias (se instalan dentro del contenedor)
 node_modules
+
+# Carpeta de build local (se genera dentro del contenedor)
 dist
-postres/
 
-*.log
+# Archivos de entorno (las variables se inyectan en Cloud Run)
 .env
-.DS_Store
+.env.*
+!.env.example
 
-./backups
-./logs
-./temp
+# Control de versiones
+.git
+.gitignore
 
+# Configuración de IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentación y archivos innecesarios para el runtime
+README.md
+README.PROYECTO.md
+Documentacion.md
+docs/
+*.md
+
+# Tests y scripts de desarrollo
+test/
+scripts/
+coverage/
+
+# Docker (evitar recursión)
+Dockerfile
+docker-compose.yaml
+docker-compose*.yml
+.dockerignore
+
+# Temporales
+temp/
+tmp/
+*.log
+npm-debug.log*
+
+# Lock de pnpm (usamos npm ci con package-lock.json)
+pnpm-lock.yaml
+
+# Postgres local
+postgres/
