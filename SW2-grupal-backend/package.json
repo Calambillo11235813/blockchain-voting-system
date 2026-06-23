@@ -21,7 +21,8 @@
     "simular:votos": "ts-node -r tsconfig-paths/register scripts/simular-votos.ts",
     "seed:eleccion": "ts-node -r tsconfig-paths/register scripts/elecciones/seed-eleccion-papeletas.ts",
     "seed:electoral": "ts-node -r tsconfig-paths/register scripts/elecciones/seed-electoral-data.ts",
-    "stress:votos": "ts-node -r tsconfig-paths/register scripts/elecciones/stress-test-voting.ts"
+    "stress:votos": "ts-node -r tsconfig-paths/register scripts/elecciones/stress-test-voting.ts",
+    "stress:votos:ganador": "ts-node -r tsconfig-paths/register scripts/elecciones/stress-test-voting-winner.ts"
   },
   "dependencies": {
     "@aws-sdk/client-rekognition": "^3.830.0",
@@ -107,7 +108,7 @@
       "json",
       "ts"
     ],
-    "rootDir": "src",
+    "rootDir": ".",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
@@ -115,7 +116,14 @@
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "coverageDirectory": "./coverage",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/src/",
+      "<rootDir>/test/"
+    ],
+    "modulePaths": [
+      "<rootDir>"
+    ]
   }
 }

@@ -329,14 +329,16 @@ export default function CaptureFlow({ onSuccess }) {
                   Siguiente
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleChooseFromDevice}
-                  disabled={isSubmitting}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Subir desde dispositivo
-                </button>
+                {currentStep.key !== 'selfie' && (
+                  <button
+                    type="button"
+                    onClick={handleChooseFromDevice}
+                    disabled={isSubmitting}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Subir desde dispositivo
+                  </button>
+                )}
               </>
             ) : (
               <>
@@ -349,14 +351,16 @@ export default function CaptureFlow({ onSuccess }) {
                   Tomar foto
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleChooseFromDevice}
-                  disabled={isSubmitting}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Subir desde dispositivo
-                </button>
+                {currentStep.key !== 'selfie' && (
+                  <button
+                    type="button"
+                    onClick={handleChooseFromDevice}
+                    disabled={isSubmitting}
+                    className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Subir desde dispositivo
+                  </button>
+                )}
               </>
             )}
 

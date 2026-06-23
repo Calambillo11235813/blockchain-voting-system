@@ -10,8 +10,8 @@ const PARAMETROS_SISTEMA = {
   BYPASS_ELECTION_TIME: { label: "Omitir Horario Electoral", tipo: "boolean", descripcion: "Desactiva el reloj electoral. Permite emitir votos sin importar la hora o la letra del apellido.", categoria: "Sistema Electoral" },
   
   // Biometría e IA
-  BYPASS_BIOMETRIA_FACE_MATCH: { label: "Omitir Reconocimiento Facial", tipo: "boolean", descripcion: "Desactiva la evaluación estricta de coincidencia facial al momento de verificar la identidad.", categoria: "Biometría e Inteligencia Artificial" },
-  BYPASS_BIOMETRIA_OCR: { label: "Omitir Lectura OCR", tipo: "boolean", descripcion: "Desactiva el reconocimiento de texto (OCR) en ambos lados del carnet para facilitar pruebas.", categoria: "Biometría e Inteligencia Artificial" },
+  BYPASS_BIOMETRIA_FACE_MATCH: { label: "Omitir Reconocimiento Facial", tipo: "boolean", descripcion: "Al activar este parámetro, el sistema ignorará la verificación de coincidencia facial al momento de votar.", categoria: "Biometría e Inteligencia Artificial" },
+  BYPASS_BIOMETRIA_OCR: { label: "Omitir Lectura OCR", tipo: "boolean", descripcion: "Al activar este parámetro, el sistema ignorará la validación de texto (OCR) del carnet para facilitar pruebas.", categoria: "Biometría e Inteligencia Artificial" },
   GEMINI_MODEL: { label: "Modelo de Gemini", tipo: "text", descripcion: "Versión exacta del modelo de inteligencia artificial de Google a utilizar (ej. gemini-2.5-flash).", categoria: "Biometría e Inteligencia Artificial" },
   
   // Blockchain y Nodos
@@ -230,15 +230,6 @@ export default function ConfiguracionSistema() {
             Administración de parámetros operacionales
           </p>
         </div>
-        <button
-          onClick={() => {
-            setShowForm(!showForm);
-            setFormData(getInitialFormState(primeraClave));
-          }}
-          className={`rounded-lg px-4 py-2 font-medium text-white transition-colors ${showForm ? 'bg-gray-500 hover:bg-gray-600' : 'bg-[#f2a900] hover:bg-yellow-600'}`}
-        >
-          {showForm ? 'Volver al listado' : 'Agregar Parámetro'}
-        </button>
       </div>
 
       {error && (

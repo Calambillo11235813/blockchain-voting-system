@@ -60,8 +60,14 @@ export default function ConsolidacionFrenteCard({ frente, index, isLeader, papel
           title="Estudiantes"
           votos={votosEstEstudiantes}
           puntos={`${ptsEstudiantes} / 50`}
+          porcentaje={Number(frente.scoreEstudiante ?? 0).toFixed(2)}
         />
-        <EstamentoRow title="Docentes" votos={votosEstDocentes} puntos={`${ptsDocentes} / 50`} />
+        <EstamentoRow 
+          title="Docentes" 
+          votos={votosEstDocentes} 
+          puntos={`${ptsDocentes} / 50`}
+          porcentaje={Number(frente.scoreDocente ?? 0).toFixed(2)} 
+        />
       </div>
     </div>
   )
@@ -76,16 +82,19 @@ function Metric({ label, value }) {
   )
 }
 
-function EstamentoRow({ title, votos, puntos }) {
+function EstamentoRow({ title, votos, puntos, porcentaje }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
       <div>
         <p className="text-xs font-semibold uppercase text-slate-500">{title}</p>
         <p className="text-sm font-medium text-slate-800">{votos} votos estimados</p>
       </div>
-      <span className="rounded bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-900">
-        {puntos} pts
-      </span>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-slate-500">{porcentaje}%</span>
+        <span className="rounded bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-900">
+          {puntos} pts
+        </span>
+      </div>
     </div>
   )
 }

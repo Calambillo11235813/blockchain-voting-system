@@ -37,12 +37,14 @@ export class BiometriaService {
     const traceId = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
     try {
+      const rawBypassOcr = await this.configuracionService.obtenerValor('BYPASS_BIOMETRIA_OCR');
       const bypassOcrMaestro =
-        (await this.configuracionService.obtenerValor('BYPASS_BIOMETRIA_OCR')) === true ||
+        rawBypassOcr === true || String(rawBypassOcr).toLowerCase() === 'true' ||
         String(process.env.BYPASS_BIOMETRIA_OCR || '').toLowerCase() === 'true';
 
+      const rawBypassFace = await this.configuracionService.obtenerValor('BYPASS_BIOMETRIA_FACE_MATCH');
       const bypassBiometriaMaestro =
-        (await this.configuracionService.obtenerValor('BYPASS_BIOMETRIA_FACE_MATCH')) === true ||
+        rawBypassFace === true || String(rawBypassFace).toLowerCase() === 'true' ||
         String(process.env.BYPASS_BIOMETRIA_FACE_MATCH || '').toLowerCase() === 'true';
 
       this.logDebug(traceId, 'Inicio de verificacion biometrica', {
@@ -78,18 +80,30 @@ export class BiometriaService {
           candidatosCi,
         });
 
-        ciSeleccionado = datosCarnet.ci;
-        for (const candidato of candidatosCi) {
-          const candidatoNormalizado = String(candidato || '').trim();
-          if (!candidatoNormalizado || this.ocrService.pareceFecha(candidatoNormalizado)) {
-            continue;
+        if (reqUser && reqUser.ci) {
+          const ciAutenticado = String(reqUser.ci).trim();
+          const coincide = candidatosCi.some(c => String(c || '').trim() === ciAutenticado);
+          
+          if (!coincide) {
+            throw new BadRequestException('El carnet presentado no corresponde al estudiante autenticado en la sesión.');
           }
+          
+          ciSeleccionado = ciAutenticado;
+          elector = await this.electoresService.buscarPorCi(ciAutenticado);
+        } else {
+          ciSeleccionado = datosCarnet.ci;
+          for (const candidato of candidatosCi) {
+            const candidatoNormalizado = String(candidato || '').trim();
+            if (!candidatoNormalizado || this.ocrService.pareceFecha(candidatoNormalizado)) {
+              continue;
+            }
 
-          const encontrado = await this.electoresService.buscarPorCi(candidatoNormalizado);
-          if (encontrado) {
-            ciSeleccionado = candidatoNormalizado;
-            elector = encontrado;
-            break;
+            const encontrado = await this.electoresService.buscarPorCi(candidatoNormalizado);
+            if (encontrado) {
+              ciSeleccionado = candidatoNormalizado;
+              elector = encontrado;
+              break;
+            }
           }
         }
 

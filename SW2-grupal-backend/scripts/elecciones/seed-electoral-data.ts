@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { Frente } from '../../src/elecciones/entities/frente.entity';
 import { Candidato } from '../../src/elecciones/entities/candidato.entity';
 import { Eleccion } from '../../src/elecciones/entities/eleccion.entity';
+import { EstadoEleccionEnum } from '../../src/elecciones/enums/estado-eleccion.enum';
 import { In } from 'typeorm';
 import {
   ELECCION_ID,
@@ -65,12 +66,21 @@ async function bootstrap() {
     let eleccion = await queryRunner.manager.findOne(Eleccion, {
       where: { id: eleccionIdObjetivo },
     });
+    
+    if (!eleccion) {
+      eleccion = await queryRunner.manager.findOne(Eleccion, {
+        where: { estado: EstadoEleccionEnum.EN_CONFIGURACION },
+        order: { fecha: 'ASC' },
+      });
+    }
+
     if (!eleccion) {
       eleccion = await queryRunner.manager.findOne(Eleccion, {
         where: { estaActiva: true },
         order: { fecha: 'DESC' },
       });
     }
+    
     if (!eleccion) {
       const [masReciente] = await queryRunner.manager.find(Eleccion, {
         order: { fecha: 'DESC' },

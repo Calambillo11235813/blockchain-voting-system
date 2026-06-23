@@ -619,15 +619,32 @@ export class EscrutinioService {
         currentY = height - 60;
       }
 
-      const tituloPapeleta = this.formatTituloPapeleta(papeleta);
-      page.drawText(tituloPapeleta, {
+      const titleObj = this.formatTituloPapeleta(papeleta);
+      page.drawText(titleObj.titulo, {
         x: 40,
         y: currentY,
         size: 12,
         font: fontHelveticaBold,
         color: colorAzulInstitucional,
       });
-      currentY -= 18;
+      currentY -= 14;
+
+      if (titleObj.subtitulo) {
+        let subSize = 10;
+        if (fontHelvetica.widthOfTextAtSize(titleObj.subtitulo, subSize) > width - 80) {
+           subSize = 8;
+        }
+        page.drawText(titleObj.subtitulo, {
+          x: 40,
+          y: currentY,
+          size: subSize,
+          font: fontHelvetica,
+          color: colorAzulInstitucional,
+        });
+        currentY -= 14;
+      }
+      
+      currentY -= 4;
 
       page.drawText(
         `Docentes: ${papeleta.totalSufragiosDocentes}/${papeleta.totalHabilitadosDocentes} · Estudiantes: ${papeleta.totalSufragiosEstudiantes}/${papeleta.totalHabilitadosEstudiantes}`,
@@ -635,46 +652,72 @@ export class EscrutinioService {
       );
       currentY -= 22;
 
+      // Table header for frentes
+      page.drawText('Organización Política', { x: 50, y: currentY, size: 9, font: fontHelveticaBold, color: colorAzulInstitucional });
+      page.drawText('Votos', { x: 380, y: currentY, size: 9, font: fontHelveticaBold, color: colorAzulInstitucional });
+      page.drawText('Ponderación', { x: 450, y: currentY, size: 9, font: fontHelveticaBold, color: colorAzulInstitucional });
+      currentY -= 14;
+      
+      // Draw a subtle line under table header
+      page.drawLine({ start: { x: 40, y: currentY + 10 }, end: { x: width - 40, y: currentY + 10 }, thickness: 0.5, color: colorGrisBorde });
+
       for (const frente of papeleta.resultadosPorFrente) {
         if (currentY < 120) {
           page = pdfDoc.addPage([595.276, 841.890]);
           currentY = height - 60;
         }
-        page.drawText(
-          `${frente.nombreFrente} (${frente.sigla}): ${frente.votosBlockchain} votos · ${frente.resultadoPonderado.toFixed(2)} pts`,
-          { x: 50, y: currentY, size: 9, font: fontHelvetica, color: colorGrisTexto },
-        );
-        currentY -= 14;
+        page.drawText(`${frente.nombreFrente} (${frente.sigla})`, { x: 50, y: currentY, size: 9, font: fontHelvetica, color: colorGrisTexto });
+        page.drawText(`${frente.votosBlockchain.toString().padStart(4, ' ')}`, { x: 380, y: currentY, size: 9, font: fontHelvetica, color: colorGrisTexto });
+        page.drawText(`${frente.resultadoPonderado.toFixed(2)} pts`, { x: 450, y: currentY, size: 9, font: fontHelveticaBold, color: colorGrisTexto });
+        currentY -= 16;
       }
+      
+      currentY -= 5;
 
-      const colorVeredicto =
-        papeleta.veredicto === 'GANADOR' ? colorVerdeGanador : colorAmbar;
+      const colorVeredicto = papeleta.veredicto === 'GANADOR' ? colorVerdeGanador : colorAmbar;
+      const bgVeredicto = papeleta.veredicto === 'GANADOR' ? rgb(0.92, 0.97, 0.92) : rgb(0.98, 0.95, 0.90);
+      
       const textoVeredicto =
         papeleta.veredicto === 'GANADOR' && papeleta.ganador
-          ? `GANADOR: ${papeleta.ganador.nombreFrente} (${papeleta.ganador.resultadoPonderado.toFixed(2)} pts)`
-          : papeleta.veredictoLabel.toUpperCase();
+          ? `RESULTADO OFICIAL: GANADOR - ${papeleta.ganador.nombreFrente.toUpperCase()} (${papeleta.ganador.resultadoPonderado.toFixed(2)} pts)`
+          : `RESULTADO OFICIAL: ${papeleta.veredictoLabel.toUpperCase()}`;
 
       page.drawRectangle({
         x: 40,
-        y: currentY - 28,
+        y: currentY - 24,
         width: width - 80,
-        height: 28,
-        color: papeleta.veredicto === 'SIN_DATOS' ? colorGrisFondo : colorVeredicto,
+        height: 24,
+        color: papeleta.veredicto === 'SIN_DATOS' ? colorGrisFondo : bgVeredicto,
+        borderColor: papeleta.veredicto === 'SIN_DATOS' ? colorGrisBorde : colorVeredicto,
+        borderWidth: 1,
       });
       page.drawText(textoVeredicto, {
         x: 50,
-        y: currentY - 18,
-        size: 10,
+        y: currentY - 16,
+        size: 9,
         font: fontHelveticaBold,
-        color: papeleta.veredicto === 'SIN_DATOS' ? colorGrisTexto : colorBlanco,
+        color: papeleta.veredicto === 'SIN_DATOS' ? colorGrisTexto : colorVeredicto,
       });
       currentY -= 45;
+      
+      // Separator between papeletas
+      page.drawLine({ start: { x: 40, y: currentY + 15 }, end: { x: width - 40, y: currentY + 15 }, thickness: 1, color: rgb(0.9, 0.9, 0.9) });
     }
 
-    if (currentY < 100) {
+    if (currentY < 150) {
       page = pdfDoc.addPage([595.276, 841.890]);
       currentY = height - 80;
     }
+
+    currentY -= 40;
+    page.drawText('FIRMAS DE CONFORMIDAD', { x: width / 2 - 70, y: currentY, size: 10, font: fontHelveticaBold, color: colorAzulInstitucional });
+    currentY -= 50;
+
+    page.drawLine({ start: { x: 80, y: currentY }, end: { x: 230, y: currentY }, thickness: 1, color: colorGrisTexto });
+    page.drawText('Presidente del Comité Electoral', { x: 85, y: currentY - 15, size: 8, font: fontHelvetica, color: colorGrisTexto });
+
+    page.drawLine({ start: { x: width - 230, y: currentY }, end: { x: width - 80, y: currentY }, thickness: 1, color: colorGrisTexto });
+    page.drawText('Notario de Fe Pública', { x: width - 190, y: currentY - 15, size: 8, font: fontHelvetica, color: colorGrisTexto });
 
     const yFooter = 70;
     page.drawLine({
@@ -716,14 +759,22 @@ export class EscrutinioService {
     return Buffer.from(pdfBytes);
   }
 
-  private formatTituloPapeleta(papeleta: ResultadoPapeletaEscrutinio): string {
+  private formatTituloPapeleta(papeleta: ResultadoPapeletaEscrutinio): { titulo: string; subtitulo?: string } {
     const nombre = papeleta.cargoNombre;
-    if (papeleta.alcance === 'GLOBAL') return `PAPELETA: ${nombre}`;
+    if (papeleta.alcance === 'GLOBAL') return { titulo: `PAPELETA: ${nombre}` };
+    
     if (papeleta.alcance === 'FACULTAD') {
-      return `PAPELETA: ${nombre} — ${papeleta.facultadNombre ?? papeleta.codFacultad ?? ''}`;
+      return { 
+        titulo: `PAPELETA: ${nombre}`, 
+        subtitulo: `FACULTAD: ${papeleta.facultadNombre ?? papeleta.codFacultad ?? ''}` 
+      };
     }
+    
     const carrera = papeleta.carreraNombre ?? papeleta.codCarrera ?? '';
     const facultad = papeleta.facultadNombre ?? papeleta.codFacultad ?? '';
-    return `PAPELETA: ${nombre} — ${facultad} / ${carrera}`;
+    return { 
+      titulo: `PAPELETA: ${nombre}`, 
+      subtitulo: `FACULTAD: ${facultad} — CARRERA: ${carrera}` 
+    };
   }
 }

@@ -89,8 +89,9 @@ export class JornadaService {
     accion: AccionJornada,
   ): Promise<ApiResponse<Eleccion>> {
     const eleccion = await this.buscarEleccionPorIdOrThrow(eleccionId);
+    const rawBypass = await this.configuracionService.obtenerValor('BYPASS_ELECTION_TIME');
     const bypass =
-      (await this.configuracionService.obtenerValor('BYPASS_ELECTION_TIME')) === true ||
+      rawBypass === true || String(rawBypass).toLowerCase() === 'true' ||
       process.env.BYPASS_ELECTION_TIME === 'true';
 
     const estadoActual = eleccion.estado ?? EstadoEleccionEnum.EN_CONFIGURACION;

@@ -29,6 +29,7 @@ export class CargoService {
 
   async crearCargo(crearCargoDto: CrearCargoDto): Promise<ApiResponse<Cargo>> {
     this.validarAlcanceDto(crearCargoDto.alcance, crearCargoDto);
+    await this.validarPapeletaUnica(crearCargoDto);
     await this.eleccionEstadoService.assertEnConfiguracion(crearCargoDto.eleccionId);
 
     const { nombre, facultad, eleccionId, tipoCargo, alcance, orden } = crearCargoDto;
@@ -141,6 +142,34 @@ export class CargoService {
 
     if (alcance === AlcancePapeletaEnum.CARRERA && !dto.codCarrera?.trim()) {
       throw new BadRequestException('codCarrera es obligatorio para alcance CARRERA.');
+    }
+  }
+
+  private async validarPapeletaUnica(dto: CrearCargoDto): Promise<void> {
+    const whereClause: any = {
+      eleccion: { id: dto.eleccionId },
+      alcance: dto.alcance,
+    };
+
+    if (dto.alcance === AlcancePapeletaEnum.FACULTAD) {
+      whereClause.codFacultad = dto.codFacultad;
+    } else if (dto.alcance === AlcancePapeletaEnum.CARRERA) {
+      whereClause.codFacultad = dto.codFacultad;
+      whereClause.codCarrera = dto.codCarrera;
+    }
+
+    const existe = await this.eleccionCargoRepository.findOne({ where: whereClause });
+    if (existe) {
+      if (dto.alcance === AlcancePapeletaEnum.GLOBAL) {
+        throw new BadRequestException('Ya existe una papeleta de alcance Global (Rectorado) para esta elección.');
+      }
+      if (dto.alcance === AlcancePapeletaEnum.FACULTAD) {
+        throw new BadRequestException('Ya existe una papeleta para esta Facultad en la elección actual.');
+      }
+      if (dto.alcance === AlcancePapeletaEnum.CARRERA) {
+        throw new BadRequestException('Ya existe una papeleta para esta Carrera en la elección actual.');
+      }
+      throw new BadRequestException('Ya existe una papeleta con este alcance para la elección.');
     }
   }
 
