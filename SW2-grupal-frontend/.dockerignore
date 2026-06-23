@@ -1,0 +1,43 @@
+# ============================================================
+# .dockerignore — Frontend React/Vite
+# Excluye archivos innecesarios para reducir el contexto de build
+# ============================================================
+
+# Dependencias (se instalan dentro del contenedor)
+node_modules
+
+# Build local (se genera dentro del contenedor)
+dist
+
+# Archivos de entorno (la URL del backend se pasa como --build-arg)
+.env
+.env.*
+
+# Control de versiones
+.git
+.gitignore
+
+# Configuración de IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentación
+README.md
+documentacion.md
+*.md
+
+# Docker (evitar recursión)
+Dockerfile
+.dockerignore
+
+# GitHub
+.github
+
+# Temporales y logs
+*.log
+npm-debug.log*
+
+# Lock de pnpm (usamos npm ci con package-lock.json)
+pnpm-lock.yaml
