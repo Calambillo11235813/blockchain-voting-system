@@ -1,66 +1,58 @@
 # ============================================================
 # Dockerfile — Backend NestJS (Votación Blockchain)
-# Multi-stage build optimizado para Google Cloud Run
+# Multi-stage build optimizado con Debian para Inteligencia Artificial
 # ============================================================
 
 # ── Etapa 1: BUILD ──────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Instalar dependencias del sistema necesarias para compilar
-# módulos nativos (sharp, bcrypt, canvas, etc.)
-RUN apk add --no-cache python3 make g++ vips-dev
+# Instalar herramientas de compilación nativa para librerías de IA y Sharp en Debian
+RUN apt-get update && apt-get install -y python3 make g++ build-essential
 
-# Copiar manifiestos de dependencias primero (mejor cache de capas)
+# Copiar manifiestos
 COPY package.json package-lock.json ./
 
-# Instalar TODAS las dependencias (incluye devDependencies para el build)
+# Instalar TODAS las dependencias
 RUN npm ci
 
 # Copiar el resto del código fuente
 COPY . .
 
-# Compilar TypeScript → JavaScript (genera carpeta dist/)
+# Compilar TypeScript → JavaScript
 RUN npm run build
 
-# Eliminar devDependencies para reducir el tamaño de la imagen final
+# Eliminar devDependencies para reducir peso
 RUN npm prune --omit=dev
 
 # ── Etapa 2: PRODUCCIÓN ────────────────────────────────────
-FROM node:22-alpine AS production
+FROM node:20-bookworm-slim AS production
 
 WORKDIR /app
 
-# Instalar dependencias de runtime necesarias para módulos nativos
-# vips: requerido por sharp (procesamiento de imágenes)
-# tesseract-ocr: requerido para OCR de carnets (CU biometría)
-RUN apk add --no-cache vips tesseract-ocr
+# Instalar Tesseract OCR (requerido para la validación de carnets)
+RUN apt-get update && apt-get install -y tesseract-ocr && rm -rf /var/lib/apt/lists/*
 
 # Copiar solo lo necesario desde la etapa de build
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-# Copiar modelos de FaceAPI (reconocimiento facial)
+# Copiar modelos de FaceAPI y archivos Tesseract
 COPY models ./models
-
-# Copiar datos entrenados de Tesseract (OCR español e inglés)
 COPY eng.traineddata ./eng.traineddata
 COPY spa.traineddata ./spa.traineddata
 
-# Copiar certificado SSL para conexión a Cloud SQL (si se usa DB_SSL=true)
+# Copiar certificado SSL y assets públicos
 COPY ssl ./ssl
-
-# Copiar assets públicos (archivos estáticos servidos por NestJS)
 COPY public ./public
 
-# Cloud Run inyecta la variable PORT automáticamente (default 8080)
 ENV PORT=8080
 EXPOSE 8080
 
 # Ejecutar como usuario no-root por seguridad
 USER node
 
-# Arrancar la aplicación compilada
+# Arrancar la aplicación
 CMD ["node", "dist/main.js"]
