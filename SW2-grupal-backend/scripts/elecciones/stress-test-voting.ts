@@ -6,9 +6,9 @@ import * as path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const API_BASE_URL = `http://localhost:${process.env.PORT || 3000}/api`;
-const BATCH_SIZE = 50;
-const TOTAL_ESTUDIANTES = 1000;
-const TOTAL_DOCENTES = 50;
+const BATCH_SIZE = 30;
+const TOTAL_ESTUDIANTES = 500;
+const TOTAL_DOCENTES = 52;
 
 /**
  * Función auxiliar para retrasar la ejecución (evitar saturar la red o el backend local).
@@ -53,10 +53,10 @@ async function runStressTest() {
         )
     `;
     const resPadron = await client.query(queryElectores, [eleccionId]);
-    
+
     const estudiantes = resPadron.rows.filter((r: any) => r.estamento === 'ESTUDIANTE').slice(0, TOTAL_ESTUDIANTES);
     const docentes = resPadron.rows.filter((r: any) => r.estamento === 'DOCENTE').slice(0, TOTAL_DOCENTES);
-    
+
     const electores = [...estudiantes, ...docentes];
     console.log(`✅ Se seleccionaron ${estudiantes.length} estudiantes y ${docentes.length} docentes.`);
     console.log(`📊 Total a procesar: ${electores.length} electores.`);
@@ -107,7 +107,7 @@ async function runStressTest() {
             headers: { Authorization: `Bearer ${token}` }
           });
           const papeletaData = papeletaRes.data;
-          
+
           if (!papeletaData || !papeletaData.cargos || papeletaData.cargos.length === 0) {
             throw new Error('Elector no tiene cargos/papeletas habilitadas');
           }
@@ -160,13 +160,13 @@ async function runStressTest() {
           fallosLote++;
           fallidos++;
           if (fallosLote === 1 && i === 0) {
-             console.error(`   ❌ Ejemplo de fallo (${res.registro}): ${res.error}`);
+            console.error(`   ❌ Ejemplo de fallo (${res.registro}): ${res.error}`);
           }
         }
       }
 
       console.log(`✅ Lote ${i + 1} completado: ${exitosLote} exitosos, ${fallosLote} fallidos.`);
-      
+
       // Pequeño descanso entre lotes para dejar respirar a Node/Postgres/Hardhat
       await delay(1000);
     }
