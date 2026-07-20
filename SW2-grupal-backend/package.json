@@ -21,8 +21,10 @@
     "simular:votos": "ts-node -r tsconfig-paths/register scripts/simular-votos.ts",
     "seed:eleccion": "ts-node -r tsconfig-paths/register scripts/elecciones/seed-eleccion-papeletas.ts",
     "seed:electoral": "ts-node -r tsconfig-paths/register scripts/elecciones/seed-electoral-data.ts",
+    "seed:parametros": "ts-node -r tsconfig-paths/register src/seed-parametros.ts",
     "stress:votos": "ts-node -r tsconfig-paths/register scripts/elecciones/stress-test-voting.ts",
-    "stress:votos:ganador": "ts-node -r tsconfig-paths/register scripts/elecciones/stress-test-voting-winner.ts"
+    "stress:votos:ganador": "ts-node -r tsconfig-paths/register scripts/elecciones/stress-test-voting-winner.ts",
+    "db:clean": "ts-node -r tsconfig-paths/register scripts/limpiar-datos-prueba.ts"
   },
   "dependencies": {
     "@aws-sdk/client-rekognition": "^3.830.0",

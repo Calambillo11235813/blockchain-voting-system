@@ -218,7 +218,7 @@ export default function ConfiguracionSistema() {
       )
     }
 
-    return <span className="text-sm font-medium text-gray-900">{parametro.valor}</span>
+    return <span className="text-sm font-medium text-gray-900 break-all">{parametro.valor}</span>
   }
 
   return (

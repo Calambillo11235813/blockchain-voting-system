@@ -23,8 +23,7 @@ COPY . .
 # Compilar TypeScript → JavaScript
 RUN npm run build
 
-# Eliminar devDependencies para reducir peso
-RUN npm prune --omit=dev
+# NOTA: No hacemos npm prune --omit=dev para mantener ts-node y poder ejecutar los scripts de prueba en producción.
 
 # ── Etapa 2: PRODUCCIÓN ────────────────────────────────────
 FROM node:20-bookworm-slim AS production
@@ -34,10 +33,14 @@ WORKDIR /app
 # Instalar Tesseract OCR (requerido para la validación de carnets)
 RUN apt-get update && apt-get install -y tesseract-ocr && rm -rf /var/lib/apt/lists/*
 
-# Copiar solo lo necesario desde la etapa de build
+# Copiar código y dependencias desde la etapa de build
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/tsconfig.paths.json ./tsconfig.paths.json || true
 
 # Copiar modelos de FaceAPI y archivos Tesseract
 COPY models ./models
