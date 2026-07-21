@@ -33,6 +33,8 @@ services:
       - VOTACION_CONTRACT_ADDRESS=0x7F3b4F46d124d07570Dd72A5Aa72b9188803DED4
       - WALLET_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
       - VOTING_WALLET_PRIVATE_KEY=0x27bd8f81d8304af0f9a623860c22786095ec227ad1bb5e1aa201bdea04546bec
+      - FRONTEND_URL=https://elecciones-ficct.duckdns.org
+      - HARDHAT_MICROSERVICE_URL=http://localhost:4000
     depends_on:
       - db
     restart: unless-stopped
