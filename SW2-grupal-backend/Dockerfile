@@ -23,6 +23,9 @@ COPY . .
 # Compilar TypeScript → JavaScript
 RUN npm run build
 
+# Verificar que el build generó los archivos correctamente
+RUN echo "=== Contenido de dist/ ===" && ls -la dist/ && ls dist/main.js
+
 # NOTA: No hacemos npm prune --omit=dev para mantener ts-node y poder ejecutar los scripts de prueba en producción.
 
 # ── Etapa 2: PRODUCCIÓN ────────────────────────────────────
