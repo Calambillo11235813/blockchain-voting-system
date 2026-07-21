@@ -53,7 +53,7 @@ async function bootstrap() {
   app.use(json({ limit: '15mb' }));
   app.use(urlencoded({ extended: true, limit: '15mb' }));
 
-  app.useStaticAssets(join(process.cwd(), 'public'));
+  app.useStaticAssets(join(process.cwd(), 'public'), { prefix: '/api' });
 
   app.enableCors(CORS);
   await app.listen(port, () => {
