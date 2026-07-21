@@ -40,7 +40,6 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/tsconfig.paths.json ./tsconfig.paths.json || true
 
 # Copiar modelos de FaceAPI y archivos Tesseract
 COPY models ./models

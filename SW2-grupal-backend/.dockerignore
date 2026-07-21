@@ -31,9 +31,8 @@ Documentacion.md
 docs/
 *.md
 
-# Tests y scripts de desarrollo
+# Tests y cobertura
 test/
-scripts/
 coverage/
 
 # Docker (evitar recursión)
