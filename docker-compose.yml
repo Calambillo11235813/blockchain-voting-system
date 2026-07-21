@@ -21,6 +21,8 @@ services:
     container_name: voting_backend
     env_file:
       - ./SW2-grupal-backend/.env
+    environment:
+      - DB_HOST=db
     depends_on:
       - db
     restart: unless-stopped
