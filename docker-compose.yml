@@ -19,22 +19,8 @@ services:
       context: ./SW2-grupal-backend
       dockerfile: Dockerfile
     container_name: voting_backend
-    environment:
-      - PORT=3000
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_NAME=Votaciones_Blockchain
-      - DB_USER=postgres
-      - DB_PASSWORD=nicolas123
-      - SECRET_KEY_JWT=example_jwt_secret_change_me_please_1234567890
-      - ENABLE_BLOCKCHAIN=true
-      - BLOCKCHAIN_URL=https://eth-sepolia.g.alchemy.com/v2/fc-Z_Vb5SV-1RM9zCJNOq
-      - NODOS_RPC_URLS=https://eth-sepolia.g.alchemy.com/v2/fc-Z_Vb5SV-1RM9zCJNOq
-      - VOTACION_CONTRACT_ADDRESS=0x7F3b4F46d124d07570Dd72A5Aa72b9188803DED4
-      - WALLET_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-      - VOTING_WALLET_PRIVATE_KEY=0x27bd8f81d8304af0f9a623860c22786095ec227ad1bb5e1aa201bdea04546bec
-      - FRONTEND_URL=https://elecciones-ficct.duckdns.org
-      - HARDHAT_MICROSERVICE_URL=http://localhost:4000
+    env_file:
+      - ./SW2-grupal-backend/.env
     depends_on:
       - db
     restart: unless-stopped
@@ -43,6 +29,8 @@ services:
     build:
       context: ./SW2-grupal-frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=/api
     container_name: voting_frontend
     restart: unless-stopped
     depends_on:
