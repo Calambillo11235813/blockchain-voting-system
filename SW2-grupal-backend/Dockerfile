@@ -53,6 +53,9 @@ COPY spa.traineddata ./spa.traineddata
 COPY ssl ./ssl
 COPY public ./public
 
+# Crear directorios temporales para biometría (multer uploads)
+RUN mkdir -p /app/temp && chown node:node /app/temp
+
 ENV PORT=8080
 EXPOSE 8080
 
