@@ -41,7 +41,7 @@ async function limpiar() {
 
     // 2. Borrar las tablas principales (Padres)
     console.log('  Borrando Electores...');
-    await queryRunner.query('DELETE FROM elector');
+    await queryRunner.query('DELETE FROM electores');
 
     console.log('  Borrando Elecciones...');
     await queryRunner.query('DELETE FROM eleccion');
